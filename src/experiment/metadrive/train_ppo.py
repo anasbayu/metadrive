@@ -27,11 +27,11 @@ from stable_baselines3.common.logger import configure
 # ============== CONFIGURATIONS =============
 N_STEPS = 3328      # max steps in 1 episode (make sure N_STEPS * NUM_ENV < TIMESTEPS)
 NUM_ENV = 5
-TIMESTEPS = 15_000_000 # max total steps the agents take during training
+TIMESTEPS = 15_000 # max total steps the agents take during training
 
 PATH_LOG_DIR = "./logs/"
-EXPERIMENT_NAME = "PPO_12"
-EXPERIMENT_SEED = 20
+EXPERIMENT_NAME = "PPO_TEST"
+EXPERIMENT_SEED = 0
 PATH_SAVED_MODEL = "file/model/" + EXPERIMENT_NAME
 PATH_CHECKPOINT = os.path.join(PATH_SAVED_MODEL, "checkpoints/")
 
