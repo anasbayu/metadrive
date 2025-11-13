@@ -1,0 +1,21 @@
+[project]
+name = "anzz-thesis"
+version = "0.1.0"
+description = "Thesis project using Stable Baselines3 to train RL agents in AVs environments."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "gymnasium[classic-control]>=0.29,<1.dev0",
+    "opencv-python>=4.12.0.88",
+    "stable-baselines3>=2.2.1,<2.3.dev0",
+    "imitation>=1.0.1,<1.1",
+    "highway-env>=1.9.1",
+    "keyboard>=0.13.5",
+    "wordcloud>=1.9.4",
+    "wandb>=0.22.3",
+    "pandas>=2.3.2",
+]
+
+[tool.uv.sources]
+metadrive-simulator = { path = "./dependencies", editable = true }
+
