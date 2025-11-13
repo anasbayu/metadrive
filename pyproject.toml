@@ -14,8 +14,5 @@ dependencies = [
     "wordcloud>=1.9.4",
     "wandb>=0.22.3",
     "pandas>=2.3.2",
+    "metadrive-simulator @ file:/root/thesis/metadrive",
 ]
-
-[tool.uv.sources]
-metadrive-simulator = { path = "./dependencies", editable = true }
-

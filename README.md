@@ -6,7 +6,7 @@
 - clone this repo to your local machine
 - navigate to your clonned project folder
 - type 'uv sync'
-- install metadrive, follow instruction on https://metadrive-simulator.readthedocs.io/en/latest/install.html
+- install metadrive INSIDE your project folder, follow instruction on https://metadrive-simulator.readthedocs.io/en/latest/install.html
 - before pulling metadrive asset, make sure to install its dependency
 
 
@@ -19,8 +19,9 @@
 - execute the image bash (docker exec -it <project-name> /bin/bash)
 - navigate to your volume (e.g. cd /root/metadrive)
 - sync the project (uv sync)
-- install metadrive, follow instruction on https://metadrive-simulator.readthedocs.io/en/latest/install.html
+- install metadrive INSIDE your project folder, follow instruction on https://metadrive-simulator.readthedocs.io/en/latest/install.html
 - before pulling metadrive asset, make sure to install its dependency
 apt-get update
 apt-get install -y libgl1-mesa-glx
+apt-get install -y libglib2.0-0
 - pull metadrive asset with "python -m metadrive.pull_asset"
