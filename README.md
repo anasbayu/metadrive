@@ -25,3 +25,7 @@ apt-get update
 apt-get install -y libgl1-mesa-glx
 apt-get install -y libglib2.0-0
 - pull metadrive asset with "python -m metadrive.pull_asset"
+
+
+## Collecting expert data
+In this research, I use MetaDrive own IDMPolicy for the expert data. To collect the expert_data.npz file (neede to train for BC), run the *./src/experiment/imitation/collect_expert_data.py*.
