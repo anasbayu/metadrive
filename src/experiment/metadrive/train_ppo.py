@@ -11,11 +11,6 @@ import gymnasium as gym
 from stable_baselines3 import PPO
 from src.leaky_PPO import LeakyPPO
 
-# ============== LOG and Monitoring =============
-# WandB integration
-# import wandb
-# from wandb.integration.sb3 import WandbCallback
-
 # default sb3 logger
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.logger import configure
@@ -28,12 +23,13 @@ from stable_baselines3.common.logger import configure
 N_STEPS = 3328      # max steps in 1 episode (make sure N_STEPS * NUM_ENV < TIMESTEPS)
 NUM_ENV = 5
 TIMESTEPS = 15_000 # max total steps the agents take during training
-
 PATH_LOG_DIR = "./logs/"
-EXPERIMENT_NAME = "PPO_TEST"
-EXPERIMENT_SEED = 0
-PATH_SAVED_MODEL = "file/model/" + EXPERIMENT_NAME
-PATH_CHECKPOINT = os.path.join(PATH_SAVED_MODEL, "checkpoints/")
+PATH_SAVED_MODEL_ROOT = "file/model/"
+
+# PATH_SAVED_MODEL = "file/model/" + EXPERIMENT_NAME
+# PATH_CHECKPOINT = os.path.join(PATH_SAVED_MODEL, "checkpoints/")
+# EXPERIMENT_NAME = "PPO_TEST"
+# EXPERIMENT_SEED = 0
 
 TRAIN_CONFIG = {
         "num_scenarios": 100,
@@ -56,15 +52,6 @@ EVAL_CONFIG = {
         "log_level": 20,
         "traffic_density": 0.0
     }
-
-WANDB_CONFIG = {
-    "policy_type": "MlpPolicy",
-    "total_timesteps": TIMESTEPS,
-    "env_name": "MetaDrive",
-    "n_steps": N_STEPS,
-    "net_arch": "pi=[256, 256], vf=[256, 256]",
-    "num_envs": NUM_ENV,
-}
 
 # ============== HELPER FUNCTIONS =============
 def linear_schedule(initial_value: float, end_value: float) -> Callable[[float], float]:
@@ -101,12 +88,16 @@ def create_env(config, log_dir=None, seed=0):
 
 
 # ============== MAIN FUNCTIONS =============
-def train(model_path_to_load=None):
+def train(
+    algo_name: str,
+    experiment_seed: int, 
+    experiment_name: str,
+    total_timesteps: int = TIMESTEPS,
+    leaky_alpha: float = 0.01):
     """
     Train a new model from scratch using a specific seed
     and scheduled hyperparameters.
     """
-    experiment_name = EXPERIMENT_NAME
     
     """
     experiment seed:
@@ -116,8 +107,8 @@ def train(model_path_to_load=None):
     experiment 4: seed = 15 (PPO_10)
     experiment 5: seed = 20 (PPO_11)
     """
-    seed = EXPERIMENT_SEED
-    set_random_seed(seed)
+    # seed = EXPERIMENT_SEED
+    set_random_seed(experiment_seed)
 
     MODEL_PARAMS = {
         "learning_rate": linear_schedule(1e-4, 1e-6),
@@ -126,14 +117,15 @@ def train(model_path_to_load=None):
 
     # Create log directories
     run_log_dir = os.path.join(PATH_LOG_DIR, experiment_name)
+    path_saved_model = os.path.join(PATH_SAVED_MODEL_ROOT, experiment_name)
+    path_checkpoint = os.path.join(path_saved_model, "checkpoints/")
+    
     os.makedirs(run_log_dir, exist_ok=True)
+    os.makedirs(path_checkpoint, exist_ok=True)
+    
+    print(f"--- Starting training for run: {experiment_name} (Seed: {experiment_seed}) ---")
 
-    os.makedirs(PATH_CHECKPOINT, exist_ok=True)
-    print(f"Starting training for run: {experiment_name}")
-    print(f"Logs will be saved to: {PATH_LOG_DIR + experiment_name}")
-    print(f"Checkpoints will be saved to: {PATH_CHECKPOINT}")
-
-    train_env = SubprocVecEnv([partial(create_env, TRAIN_CONFIG, run_log_dir) for _ in range(NUM_ENV)])
+    train_env = SubprocVecEnv([partial(create_env, TRAIN_CONFIG, run_log_dir, seed=experiment_seed + i) for i in range(NUM_ENV)])
     logger = configure(run_log_dir, ["stdout", "csv", "json", "tensorboard"])
     policy_kwargs = dict(
         # pi = policy network, vf = value function network
@@ -149,17 +141,42 @@ def train(model_path_to_load=None):
       save_vecnormalize=False
     )
 
-    model = PPO(
-            "MlpPolicy", 
-            train_env,
-            n_steps=N_STEPS,
-            verbose=1,
-            policy_kwargs=policy_kwargs,
-            tensorboard_log=PATH_LOG_DIR,
-            max_grad_norm=0.5,
-            seed=seed,
-            **MODEL_PARAMS
-    )
+    model = None
+    common_params = {
+        "policy": "MlpPolicy",
+        "env": train_env,
+        "n_steps": N_STEPS,
+        "verbose": 0,
+        "policy_kwargs": policy_kwargs,
+        "tensorboard_log": PATH_LOG_DIR,
+        "max_grad_norm": 0.5,
+        "seed": experiment_seed,
+        **MODEL_PARAMS
+    }
+
+    if algo_name == "PPO":
+        print("Instantiating standard PPO...")
+        model = PPO(**common_params)
+        
+    elif algo_name == "LeakyPPO":
+        print(f"Instantiating LeakyPPO (alpha={leaky_alpha})...")
+        model = LeakyPPO(
+            **common_params,
+            alpha=leaky_alpha
+        )
+    else:
+        raise ValueError(f"Unknown algorithm: {algo_name}. Must be 'PPO' or 'LeakyPPO'.")
+    # model = PPO(
+    #         "MlpPolicy", 
+    #         train_env,
+    #         n_steps=N_STEPS,
+    #         verbose=1,
+    #         policy_kwargs=policy_kwargs,
+    #         tensorboard_log=PATH_LOG_DIR,
+    #         max_grad_norm=0.5,
+    #         seed=experiment_seed,
+    #         **MODEL_PARAMS
+    # )
     # model = LeakyPPO(
     #         "MlpPolicy", 
     #         train_env,
@@ -168,29 +185,33 @@ def train(model_path_to_load=None):
     #         policy_kwargs=policy_kwargs,
     #         tensorboard_log=PATH_LOG_DIR,
     #         max_grad_norm=0.5,
-    #         seed=seed,
+    #         seed=experiment_seed,
     #         **MODEL_PARAMS,
     #         alpha=0.01
     # )
 
     model.set_logger(logger)
     model.learn(
-        total_timesteps=TIMESTEPS, 
+        total_timesteps=total_timesteps, 
         tb_log_name=experiment_name,
         callback=checkpoint_callback,
         reset_num_timesteps=True
     )
-    model.save(PATH_SAVED_MODEL)
 
-    print("--- Training Complete ---")
-    print(f"Model saved to {PATH_SAVED_MODEL}.zip")
-    print(f"Logs saved to {run_log_dir}")
+    # Save the final model with a unique name
+    final_model_path = os.path.join(PATH_SAVED_MODEL_ROOT, f"{experiment_name}_final.zip")
+    model.save(final_model_path)
 
-def evaluate_model(model_path):
-    print("\n--- Starting Evaluation ---")
+    print(f"--- Training Complete for {experiment_name} ---")
+
+    # Return the path to the saved model for evaluation
+    return final_model_path
+
+def evaluate_model(model_path: str, algo_name: str, num_episodes=10):
+    print(f"--- Starting Evaluation for {model_path} ---")
     if not os.path.exists(model_path):
         print(f"Error: Model file not found at {model_path}")
-        return
+        return [] # Return an empty list on failure
 
     try:
         MetaDriveEnv.setup_assets()
@@ -200,10 +221,17 @@ def evaluate_model(model_path):
     eval_env = MetaDriveEnv(EVAL_CONFIG)
 
     # Load the trained model
-    print(f"Loading model from {model_path}...")
-    model = PPO.load(model_path)
+    model = None
+    print(f"Loading {algo_name} model...")
+    if algo_name == "PPO":
+        model = PPO.load(model_path)
+    elif algo_name == "LeakyPPO":
+        # Pass eval_env so SB3 can set it on the loaded model
+        model = LeakyPPO.load(model_path, env=eval_env)
+    else:
+        raise ValueError(f"Unknown algorithm: {algo_name}")
     
-    num_episodes = 10
+    episode_rewards = []
     print(f"Running {num_episodes} evaluation episodes...")
     
     for ep in range(num_episodes):
@@ -220,9 +248,12 @@ def evaluate_model(model_path):
             total_reward += reward            
         
         print(f"Episode {ep+1}: Total Reward = {total_reward:.2f}")
+        episode_rewards.append(total_reward) # Store the reward
     
     eval_env.close()
     print("--- Evaluation Finished ---")
+
+    return episode_rewards
 
 
 def random_policy():
