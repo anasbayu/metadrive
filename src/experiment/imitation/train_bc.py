@@ -22,12 +22,12 @@ from stable_baselines3.common.utils import set_random_seed
 # ---
 # Path to the expert data
 # ---
-EXPERT_DATA_PATH = "file/expert_data/expert_metadrive_buffer.npz"
+EXPERT_DATA_PATH = "file/expert_data/expert_metadrive_buffer_3.npz"
 
 # ---
 # Path to save the new pre-trained IL policy
 # ---
-BC_POLICY_SAVE_PATH = "file/model/bc_policy.zip"
+BC_POLICY_SAVE_PATH = "file/model/bc_policy_3.zip"
 
 # ---
 # We need a base config to create the env for its observation space

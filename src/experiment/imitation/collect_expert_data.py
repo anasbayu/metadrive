@@ -9,11 +9,12 @@ from stable_baselines3.common.buffers import ReplayBuffer
 NUM_EPISODES_TO_RECORD = 100  
 DATA_SAVE_PATH = "./file/expert_data/"
 BUFFER_SIZE = 200_000  # number of data collected
+EXPORT_NAME = "expert_metadrive_buffer_3"
 
 COLLECT_CONFIG = {
     "use_render": False,     # Fast mode (no graphics)
     "manual_control": False, # Disable human control
-    "agent_policy": IDMPolicy, # Use the built-in expert
+    "agent_policy": IDMPolicy,  # Use IDM as the expert policy
     "num_scenarios": 100,
     "start_seed": 0,
     "traffic_density": 0.0,
@@ -36,6 +37,9 @@ def collect_data():
         n_envs=1
     )
 
+    print("Initializing environment by calling reset...")
+    obs, info = env.reset()
+
     # dummy action will be ignored since we use expert policy
     dummy_action = env.action_space.sample()
 
@@ -52,14 +56,21 @@ def collect_data():
         episode_reward = 0
 
         while not terminated and not truncated:
+            # expert_action = expert_policy.act()
+            # next_obs, reward, terminated, truncated, info = env.step(expert_action)
+
             next_obs, reward, terminated, truncated, info = env.step(dummy_action)
-            expert_action_list = info["action"]
-            expert_action_np = np.array(expert_action_list) # Convert to numpy array for sb3 buffer
+            # expert_action_list = info["action"]
+            # expert_action_np = np.array(expert_action_list) # Convert to numpy array for sb3 buffer
+
+            expert_action_tuple = env.agents["default_agent"].last_action
+            expert_action = np.array(expert_action_tuple)
 
             replay_buffer.add(
                 obs,
                 next_obs,
-                expert_action_np, # Save the EXPERT action
+                # expert_action_np, # Save the EXPERT action
+                expert_action,
                 reward,
                 terminated,
                 [info]
@@ -79,7 +90,7 @@ def collect_data():
     env.close()
     print(f"--- Collection Complete. Total Steps: {total_steps} ---")
     
-    save_file = os.path.join(DATA_SAVE_PATH, "expert_metadrive_buffer")
+    save_file = os.path.join(DATA_SAVE_PATH, EXPORT_NAME)
     print(f"Saving data to {save_file}.npz ...")
     
     # Save only the filled portion of the buffer
