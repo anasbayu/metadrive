@@ -40,6 +40,7 @@ BC_TRAIN_CONFIG = {
     "num_scenarios": 100,
     "start_seed": 0,
     "traffic_density": 0.0,
+    "window_size": (100, 100),
 }
 
 # ---
@@ -52,6 +53,7 @@ BC_EVAL_CONFIG = {
     "manual_control": False,
     "log_level": 20,
     "traffic_density": 0.0,
+    "window_size": (100, 100),
 }
 # -------------------------------------------
 

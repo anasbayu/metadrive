@@ -18,6 +18,7 @@ COLLECT_CONFIG = {
     "start_seed": 0,
     "traffic_density": 0.0,
     "log_level": 50,
+    "window_size": (100, 100),
 }
 
 def collect_data():
