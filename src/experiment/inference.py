@@ -29,7 +29,7 @@ INFERENCE_CONFIG = {
     "use_render": True,      # <-- MUST BE TRUE to watch
     "manual_control": False,
     "log_level": 20,
-    "traffic_density": 0.1,  # You can change this to 0.0 or 0.3
+    "traffic_density": 0.0,  # You can change this to 0.0 or 0.3
 }
 
 # ============== HELPER FUNCTIONS =============
