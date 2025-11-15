@@ -47,7 +47,7 @@ TRAIN_CONFIG = {
 EVAL_CONFIG = {
         "num_scenarios": 10,
         "start_seed": 1000,
-        "use_render": True,
+        "use_render": False,
         "manual_control": False,
         "log_level": 20,
         "traffic_density": 0.0
@@ -135,7 +135,7 @@ def train(
 
     checkpoint_callback = CheckpointCallback(
       save_freq=499_200, # save checkpoint each 30 updates (timesteps*n_env)
-      save_path=PATH_CHECKPOINT,
+      save_path=path_checkpoint,
       name_prefix="ppo_metadrive_ckpt",
       save_replay_buffer=False,
       save_vecnormalize=False
@@ -201,6 +201,8 @@ def train(
     # Save the final model with a unique name
     final_model_path = os.path.join(PATH_SAVED_MODEL_ROOT, f"{experiment_name}_final.zip")
     model.save(final_model_path)
+
+    train_env.close()
 
     print(f"--- Training Complete for {experiment_name} ---")
 

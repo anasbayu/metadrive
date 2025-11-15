@@ -1,7 +1,15 @@
+import multiprocessing as mp
+from src.experiment.metadrive.run_experiments import run_all_experiments
+
 
 def main():
-    print("Start MetaDrive PPO Training")
+    run_all_experiments()
 
 
 if __name__ == "__main__":
+    try:
+        mp.set_start_method("spawn")
+    except RuntimeError:
+        pass
+
     main()
