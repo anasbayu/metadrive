@@ -15,4 +15,5 @@ dependencies = [
     "wandb>=0.22.3",
     "pandas>=2.3.2",
     "metadrive-simulator @ file:/root/thesis/metadrive",
+    "np-utils>=0.6.0",
 ]

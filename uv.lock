@@ -121,6 +121,7 @@ dependencies = [
     { name = "imitation" },
     { name = "keyboard" },
     { name = "metadrive-simulator" },
+    { name = "np-utils" },
     { name = "opencv-python" },
     { name = "pandas" },
     { name = "stable-baselines3" },
@@ -135,6 +136,7 @@ requires-dist = [
     { name = "imitation", specifier = ">=1.0.1,<1.1" },
     { name = "keyboard", specifier = ">=0.13.5" },
     { name = "metadrive-simulator", directory = "metadrive" },
+    { name = "np-utils", specifier = ">=0.6.0" },
     { name = "opencv-python", specifier = ">=4.12.0.88" },
     { name = "pandas", specifier = ">=2.3.2" },
     { name = "stable-baselines3", specifier = ">=2.2.1,<2.3.dev0" },
@@ -1307,6 +1309,15 @@ sdist = { url = "https://files.pythonhosted.org/packages/6c/4f/ccdb8ad3a38e583f2
 wheels = [
     { url = "https://files.pythonhosted.org/packages/eb/8d/776adee7bbf76365fdd7f2552710282c79a4ead5d2a46408c9043a2b70ba/networkx-3.5-py3-none-any.whl", hash = "sha256:0030d386a9a06dee3565298b4a734b68589749a544acbb6c412dc9e2489ec6ec", size = 2034406, upload-time = "2025-05-29T11:35:04.961Z" },
 ]
+
+[[package]]
+name = "np-utils"
+version = "0.6.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/83/09/612afbe0a602d35fae6b87fd201c5237f049bb27dbb99a6c5e3a931e5ae3/np_utils-0.6.0.tar.gz", hash = "sha256:2aa5c7ece3d1cb512d1af718aa05a5909dd47c74e5978b7c389c9b4f1a6ef804", size = 61986, upload-time = "2022-01-09T04:11:12.123Z" }
 
 [[package]]
 name = "numpy"

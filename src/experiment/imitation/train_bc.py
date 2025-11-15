@@ -2,10 +2,11 @@ import os
 import numpy as np
 import gymnasium as gym
 from functools import partial
+import torch
 
 # Import for Imitation Learning (BC)
 from imitation.algorithms import bc
-from imitation.data import types
+import imitation.data.types as im_types
 import np_utils
 
 # Imports for SB3 policy and environment
@@ -115,7 +116,30 @@ def main():
 
     # Load the expert data from the .npz file
     print(f"Loading expert data from {EXPERT_DATA_PATH}...")
-    expert_data = types.load(EXPERT_DATA_PATH)
+    data = np.load(EXPERT_DATA_PATH, allow_pickle=True)
+    num_transitions = len(data["observations"])
+    
+    # Check if 'infos' was saved. If not, create dummy infos.
+    if "infos" in data:
+        infos = data["infos"]
+    else:
+        print("Warning: 'infos' field not found in expert data. Creating dummy 'infos'.")
+        # BC trainer requires an 'infos' field, even if it's empty.
+        infos = np.array([{} for _ in range(num_transitions)])
+
+    # Ensure dones is a 1D boolean array
+    dones = data["dones"].astype(bool).flatten()
+
+    # Create the 'Transitions' object that imitation's BC trainer expects
+    # Note: BC (supervised learning) does not use 'rewards'.
+    expert_data = im_types.Transitions(
+        obs=data["observations"],
+        acts=data["actions"],
+        next_obs=data["next_observations"],
+        dones=dones,
+        infos=infos
+    )
+
     print(f"Loaded {len(expert_data)} expert transitions.")
 
     # Create a DummyVecEnv for the BC trainer
@@ -132,14 +156,20 @@ def main():
     rng = np.random.default_rng(0)
     
     print("Initializing BC trainer...")
+    policy = ActorCriticPolicy(
+        observation_space=venv.observation_space,
+        action_space=venv.action_space,
+        lr_schedule=lambda _: 0.0, # Dummy LR, BC will override this
+        **policy_kwargs
+    )
+
     bc_trainer = bc.BC(
         observation_space=venv.observation_space,
         action_space=venv.action_space,
         demonstrations=expert_data,
-        policy_class=ActorCriticPolicy, # Use the PPO policy class
-        policy_kwargs=policy_kwargs,
+        policy=policy,
         rng=rng,
-        # device="cuda" if you have a GPU
+        device="cuda" if torch.cuda.is_available() else "cpu"
     )
 
     # 5. Train the policy
@@ -155,7 +185,7 @@ def main():
     print("--- Policy Saved ---")
     
     # 7. Evaluate the new policy
-    evaluate_bc_policy(bc_trainer.policy, BC_EVAL_CONFIG)
+    # evaluate_bc_policy(bc_trainer.policy, BC_EVAL_CONFIG)
     
     venv.close()
 
