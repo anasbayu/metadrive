@@ -8,6 +8,8 @@
 - type 'uv sync'
 - install metadrive INSIDE your project folder, follow instruction on https://metadrive-simulator.readthedocs.io/en/latest/install.html
 - before pulling metadrive asset, make sure to install its dependency
+-edit pyproject.toml. Add "metadrive-simulator @ file:D:/Kuliah/projects/tesis/public-metadrive/metadrive", to the dependencies.
+
 
 
 ### Docker
@@ -25,6 +27,7 @@ apt-get update
 apt-get install -y libgl1-mesa-glx
 apt-get install -y libglib2.0-0
 - pull metadrive asset with "python -m metadrive.pull_asset"
+-edit pyproject.toml. Add "metadrive-simulator @ file:/root/thesis/metadrive/", to the dependencies.
 
 
 ## Collecting expert data

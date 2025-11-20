@@ -14,7 +14,7 @@ dependencies = [
     "wordcloud>=1.9.4",
     "wandb>=0.22.3",
     "pandas>=2.3.2",
-    "metadrive-simulator @ file:D:/Kuliah/projects/tesis/public-metadrive/metadrive",
+    "metadrive-simulator @ file:/root/thesis/metadrive/",
     "np-utils>=0.6.0",
     "optuna>=4.5.0",
     "optuna-dashboard>=0.20.0",

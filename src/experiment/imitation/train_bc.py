@@ -27,7 +27,7 @@ EXPERT_DATA_PATH = "file/expert_data/expert_metadrive_buffer_3.npz"
 # ---
 # Path to save the new pre-trained IL policy
 # ---
-BC_POLICY_SAVE_PATH = "file/model/bc_policy_3.zip"
+BC_POLICY_SAVE_PATH = "file/model/bc_policy_4.zip"
 
 # ---
 # We need a base config to create the env for its observation space
@@ -49,7 +49,7 @@ BC_TRAIN_CONFIG = {
 BC_EVAL_CONFIG = {
     "num_scenarios": 10,
     "start_seed": 1000,
-    "use_render": True,
+    "use_render": False,
     "manual_control": False,
     "log_level": 20,
     "traffic_density": 0.0,
@@ -177,7 +177,7 @@ def main():
     # 5. Train the policy
     print("--- Starting BC policy training... ---")
     # n_epochs=100 is a good starting point for BC
-    bc_trainer.train(n_epochs=100, log_interval=10)
+    bc_trainer.train(n_epochs=10000, log_interval=10)
     print("--- BC Training Complete ---")
 
     # 6. Save the trained policy

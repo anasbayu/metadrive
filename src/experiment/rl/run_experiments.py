@@ -2,7 +2,7 @@ import json
 import numpy as np
 import os
 
-from src.experiment.metadrive.train_ppo import train, evaluate_model 
+from src.experiment.rl.train_ppo import train, evaluate_model 
 
 # === EXPERIMENTS CONFIG ===
 ALGORITHMS_TO_TEST = ["PPO"]     # ["PPO", "LeakyPPO"]
