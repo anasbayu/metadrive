@@ -1,5 +1,5 @@
 import multiprocessing as mp
-from src.experiment.metadrive.run_experiments import run_all_experiments
+from src.experiment.rl.run_experiments import run_all_experiments
 
 
 def main():
