@@ -56,8 +56,21 @@ def objective(trial):
     batch_size = trial.suggest_categorical("batch_size", [64, 128, 256, 512])
     n_steps = trial.suggest_categorical("n_steps", [2048, 3328, 4096])
     
+    # Gamma: Higher = better for long tracks. 
+    gamma = trial.suggest_categorical("gamma", [0.99, 0.995, 0.999, 0.9999])
+    
+    # GAE Lambda: Trade-off bias vs variance
+    gae_lambda = trial.suggest_categorical("gae_lambda", [0.90, 0.95, 0.98, 0.99])
+    
+    # Clip Range: Lower = More stable
+    clip_range = trial.suggest_categorical("clip_range", [0.1, 0.2, 0.3])
+    
+    # N Epochs: Lower = More stable updates
+    n_epochs = trial.suggest_categorical("n_epochs", [5, 10, 20])
+
     print(f"\n--- Trial {trial.number} ---")
     print(f"Params: lr={learning_rate}, ent={ent_coef}, batch={batch_size}, n_steps={n_steps}")
+    print(f"Gamma={gamma}, GAE={gae_lambda}, Clip={clip_range}, Epochs={n_epochs}")
 
     # 2. Create Environments
     env_fns = [partial(create_env, TRAIN_CONFIG) for _ in range(NUM_ENV)]
@@ -83,6 +96,10 @@ def objective(trial):
         ent_coef=ent_coef,
         batch_size=batch_size,
         n_steps=n_steps,
+        gamma=gamma,
+        gae_lambda=gae_lambda,
+        clip_range=clip_range,
+        n_epochs=n_epochs,
         verbose=0, 
         max_grad_norm=0.5 
     )
