@@ -17,7 +17,7 @@ torch.serialization.add_safe_globals(safe_globals)
 # ---------------------------
 
 # === CONFIG FOR TUNING ===
-N_TRIALS = 20          # How many different hyperparams to try
+N_TRIALS = 35          # How many different hyperparams to try
 N_STARTUP_TRIALS = 5   # Don't prune the first 5 trials
 N_EVALUATIONS = 5      # How many times to check performance per trial
 TIMESTEPS_PER_TRIAL = 2_000_000 # Short runs for speed (2M steps)

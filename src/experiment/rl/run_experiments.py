@@ -7,7 +7,7 @@ from src.experiment.rl.train_ppo import train, evaluate_model
 # === EXPERIMENTS CONFIG ===
 ALGORITHMS_TO_TEST = ["PPO"]     # ["PPO", "LeakyPPO"]
 SEEDS = [0, 5, 10, 15, 20]  # (5 runs per algorithm)
-REAL_TIMESTEPS = 10_000
+REAL_TIMESTEPS = 15_000_000
 EVAL_EPISODES = 50
 
 def run_all_experiments():
@@ -19,9 +19,10 @@ def run_all_experiments():
     all_scores = {}
 
     print("===== STARTING EXPERIMENT SUITE =====")
+    print(f"Total Timesteps: {REAL_TIMESTEPS}")
+    print(f"Eval Episodes:   {EVAL_EPISODES}")
 
     for algo_name in ALGORITHMS_TO_TEST:
-        
         print(f"\n===== STARTING RUNS FOR: {algo_name} =====")
         all_scores[algo_name] = [] # Initialize list for this algo
 
@@ -35,7 +36,7 @@ def run_all_experiments():
                 experiment_seed=seed,
                 experiment_name=experiment_name,
                 total_timesteps=REAL_TIMESTEPS,
-                leaky_alpha=0.01
+                leaky_alpha=0.01        # Only used if algo_name is 'LeakyPPO'
             )
             
             # 2. EVALUATE

@@ -16,20 +16,21 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.logger import configure
 
 
-# ============== Evaluation =============
-# import rliable
+# --- FIX FOR PyTorch 2.6+ LOADING ERROR ---
+safe_globals = [
+    gym.spaces.box.Box, np.float32, np.int64,
+    np.uint8, np.bool_, np.dtype
+]
+torch.serialization.add_safe_globals(safe_globals)
+# ------------------------------------------
+
 
 # ============== CONFIGURATIONS =============
-N_STEPS = 3328      # max steps in 1 episode (make sure N_STEPS * NUM_ENV < TIMESTEPS)
+N_STEPS = 2048      # max steps in 1 episode (make sure N_STEPS * NUM_ENV < TIMESTEPS)
 NUM_ENV = 5
-TIMESTEPS = 15_000 # max total steps the agents take during training
+TIMESTEPS = 15_000_000 # max total steps the agents take during training
 PATH_LOG_DIR = "./logs/"
 PATH_SAVED_MODEL_ROOT = "file/model/"
-
-# PATH_SAVED_MODEL = "file/model/" + EXPERIMENT_NAME
-# PATH_CHECKPOINT = os.path.join(PATH_SAVED_MODEL, "checkpoints/")
-# EXPERIMENT_NAME = "PPO_TEST"
-# EXPERIMENT_SEED = 0
 
 TRAIN_CONFIG = {
         "num_scenarios": 100,
@@ -110,10 +111,30 @@ def train(
     # seed = EXPERIMENT_SEED
     set_random_seed(experiment_seed)
 
+    # ---
+    # HYPERPARAMETERS from Optuna Result
+    # ---
     MODEL_PARAMS = {
-        "learning_rate": linear_schedule(1e-4, 1e-6),
-        "ent_coef": 0.01
+        # Learning Rate: Start at Optuna's 1.58e-5, decay to 1e-6
+        "learning_rate": linear_schedule(1.58e-5, 1e-6),
+        
+        # Entropy: Start at Optuna's 0.038, decay to 0.0
+        # "ent_coef": linear_schedule(0.038, 0.0),
+        "ent_coef": 0.038,
+        
+        # Static Parameters (from Optuna)
+        "batch_size": 128,
+        "n_steps": 2048,      # Explicitly override N_STEPS
+        "gamma": 0.9999,      # High gamma for long-term survival
+        "gae_lambda": 0.9,    # Lower variance
+        "clip_range": 0.3,    # Faster learning
+        "n_epochs": 20        # Squeeze more out of data
     }
+
+    # MODEL_PARAMS = {
+    #     "learning_rate": linear_schedule(1e-4, 1e-6),
+    #     "ent_coef": 0.01
+    # }
 
     # Create log directories
     run_log_dir = os.path.join(PATH_LOG_DIR, experiment_name)

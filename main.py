@@ -3,7 +3,7 @@ from src.experiment.rl.run_experiments import run_all_experiments
 
 
 def main():
-    # run_all_experiments()
+    run_all_experiments()
     print("Experiments completed.")
 
 
