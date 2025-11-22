@@ -16,13 +16,13 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.logger import configure
 
 
-# --- FIX FOR PyTorch 2.6+ LOADING ERROR ---
-safe_globals = [
-    gym.spaces.box.Box, np.float32, np.int64,
-    np.uint8, np.bool_, np.dtype
-]
-torch.serialization.add_safe_globals(safe_globals)
-# ------------------------------------------
+# # --- FIX FOR PyTorch 2.6+ LOADING ERROR ---
+# safe_globals = [
+#     gym.spaces.box.Box, np.float32, np.int64,
+#     np.uint8, np.bool_, np.dtype
+# ]
+# torch.serialization.add_safe_globals(safe_globals)
+# # ------------------------------------------
 
 
 # ============== CONFIGURATIONS =============
@@ -116,11 +116,11 @@ def train(
     # ---
     MODEL_PARAMS = {
         # Learning Rate: Start at Optuna's 1.58e-5, decay to 1e-6
-        "learning_rate": linear_schedule(1.58e-5, 1e-6),
+        "learning_rate": linear_schedule(1.51e-5, 1e-6),
         
-        # Entropy: Start at Optuna's 0.038, decay to 0.0
-        # "ent_coef": linear_schedule(0.038, 0.0),
-        "ent_coef": 0.038,
+        # Entropy: Start at Optuna's 0.042, decay to 0.0
+        # "ent_coef": linear_schedule(0.042, 0.0),
+        "ent_coef": 0.042,
         
         # Static Parameters (from Optuna)
         "batch_size": 128,
