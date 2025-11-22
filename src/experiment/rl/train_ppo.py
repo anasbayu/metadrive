@@ -2,6 +2,7 @@ import os
 from random import seed
 from metadrive.envs.metadrive_env import MetaDriveEnv
 from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
+from stable_baselines3.common.callbacks import BaseCallback, CallbackList
 from stable_baselines3.common.callbacks import CheckpointCallback
 from stable_baselines3.common.utils import set_random_seed
 from functools import partial
@@ -71,6 +72,31 @@ def linear_schedule(initial_value: float, end_value: float) -> Callable[[float],
     return func
 
 
+# ---
+# Custom Callback to schedule Entropy (since PPO doesn't support it natively)
+# ---
+class EntropyScheduleCallback(BaseCallback):
+    def __init__(self, initial_ent_coef: float, final_ent_coef: float, verbose=0):
+        super().__init__(verbose)
+        self.initial_ent_coef = initial_ent_coef
+        self.final_ent_coef = final_ent_coef
+
+    def _on_step(self) -> bool:
+        # access the model's current progress (1.0 at start, 0.0 at end)
+        progress = self.model._current_progress_remaining
+        
+        # Linear decay calculation
+        current_ent_coef = self.final_ent_coef + progress * (self.initial_ent_coef - self.final_ent_coef)
+        
+        # Update the model's ent_coef directly
+        self.model.ent_coef = current_ent_coef
+        
+        # Optional: Log it to TensorBoard
+        self.logger.record("train/ent_coef", current_ent_coef)
+        return True
+
+
+
 def create_env(config, log_dir=None, seed=0):
     """
     Helper function to create, configure, wrap, and seed the environment.
@@ -111,16 +137,22 @@ def train(
     # seed = EXPERIMENT_SEED
     set_random_seed(experiment_seed)
 
+    # --- Hyperparameter Schedules ---
+    LR_START = 1.51e-5
+    LR_END = 1e-6
+    ENT_START = 0.0425
+    ENT_END = 0.0
+
     # ---
     # HYPERPARAMETERS from Optuna Result
     # ---
     MODEL_PARAMS = {
         # Learning Rate: Start at Optuna's 1.58e-5, decay to 1e-6
-        "learning_rate": linear_schedule(1.51e-5, 1e-6),
+        "learning_rate": linear_schedule(LR_START, LR_END),
         
         # Entropy: Start at Optuna's 0.042, decay to 0.0
         # "ent_coef": linear_schedule(0.042, 0.0),
-        "ent_coef": 0.042,
+        "ent_coef": ENT_START,
         
         # Static Parameters (from Optuna)
         "batch_size": 128,
@@ -154,6 +186,7 @@ def train(
         net_arch=dict(pi=[256, 256], vf=[256, 256])
     )
 
+    # --- Checkpoint Callback ---
     checkpoint_callback = CheckpointCallback(
       save_freq=499_200, # save checkpoint each 30 updates (timesteps*n_env)
       save_path=path_checkpoint,
@@ -161,6 +194,16 @@ def train(
       save_replay_buffer=False,
       save_vecnormalize=False
     )
+
+    # --- Entropy Schedule Callback ---
+    entropy_callback = EntropyScheduleCallback(
+        initial_ent_coef=ENT_START,
+        final_ent_coef=ENT_END
+    )
+
+    # --- Combine them into a list ---
+    # PPO.learn() takes a list or a single callback
+    callbacks = CallbackList([checkpoint_callback, entropy_callback])
 
     model = None
     common_params = {
@@ -187,35 +230,13 @@ def train(
         )
     else:
         raise ValueError(f"Unknown algorithm: {algo_name}. Must be 'PPO' or 'LeakyPPO'.")
-    # model = PPO(
-    #         "MlpPolicy", 
-    #         train_env,
-    #         n_steps=N_STEPS,
-    #         verbose=1,
-    #         policy_kwargs=policy_kwargs,
-    #         tensorboard_log=PATH_LOG_DIR,
-    #         max_grad_norm=0.5,
-    #         seed=experiment_seed,
-    #         **MODEL_PARAMS
-    # )
-    # model = LeakyPPO(
-    #         "MlpPolicy", 
-    #         train_env,
-    #         n_steps=N_STEPS,
-    #         verbose=1,
-    #         policy_kwargs=policy_kwargs,
-    #         tensorboard_log=PATH_LOG_DIR,
-    #         max_grad_norm=0.5,
-    #         seed=experiment_seed,
-    #         **MODEL_PARAMS,
-    #         alpha=0.01
-    # )
+    
 
     model.set_logger(logger)
     model.learn(
         total_timesteps=total_timesteps, 
         tb_log_name=experiment_name,
-        callback=checkpoint_callback,
+        callback=callbacks,
         reset_num_timesteps=True
     )
 
