@@ -55,6 +55,12 @@ class LeakyPPO(PPO):
         pg_losses, value_losses = [], []
         clip_fractions = []
 
+        # LeakyPPO specific lists for logging
+        lower_bounds = []
+        upper_bounds = []
+        ratios = []
+        standard_clip_fractions = []
+
         continue_training = True
         # train for n_epochs epochs
         for epoch in range(self.n_epochs):
@@ -88,6 +94,12 @@ class LeakyPPO(PPO):
                 lower_bound = self.alpha * ratio + (1 - self.alpha) * (1 - clip_range)
                 upper_bound = self.alpha * ratio + (1 - self.alpha) * (1 + clip_range)
                 
+
+                lower_bounds.append(lower_bound.mean().item())
+                upper_bounds.append(upper_bound.mean().item())
+                ratios.append(ratio.mean().item())
+
+
                 # Calculate the policy loss using the Leaky clipped surrogate objective
                 policy_loss_1 = advantages * ratio
                 policy_loss_2 = advantages * th.clamp(ratio, lower_bound, upper_bound)
@@ -96,8 +108,22 @@ class LeakyPPO(PPO):
 
                 # Logging
                 pg_losses.append(policy_loss.item())
-                clip_fraction = th.mean((th.abs(ratio - 1) > clip_range).float()).item()
+                
+                # Standard PPO clip fraction calculation
+                # clip_fraction = th.mean((th.abs(ratio - 1) > clip_range).float()).item()
+                
+                # Leaky PPO clip fraction calculation
+                clip_fraction = th.mean(
+                    ((ratio < lower_bound) | (ratio > upper_bound)).float()
+                ).item()
+
                 clip_fractions.append(clip_fraction)
+
+
+                # Log the standard clip fraction for comparison
+                standard_clip_fraction = th.mean((th.abs(ratio - 1) > clip_range).float()).item()
+                standard_clip_fractions.append(standard_clip_fraction)  # APPEND TO LIST INSTEAD
+
 
                 if self.clip_range_vf is None:
                     # No clipping
@@ -167,5 +193,12 @@ class LeakyPPO(PPO):
         if self.clip_range_vf is not None:
             self.logger.record("train/clip_range_vf", clip_range_vf)
 
+        # LeakyPPO specific logs
+        self.logger.record("train/leaky_lower_bound_mean", np.mean(lower_bounds))
+        self.logger.record("train/leaky_upper_bound_mean", np.mean(upper_bounds))
+        self.logger.record("train/ratio_mean", np.mean(ratios))
+        self.logger.record("train/ratio_std", np.std(ratios))
+        self.logger.record("train/alpha", self.alpha)
+        self.logger.record("train/standard_clip_fraction", np.mean(standard_clip_fractions))
 
     
