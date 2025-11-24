@@ -16,6 +16,8 @@ from src.leaky_PPO import LeakyPPO
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.logger import configure
 
+import numpy as np
+
 
 # # --- FIX FOR PyTorch 2.6+ LOADING ERROR ---
 # safe_globals = [
@@ -96,6 +98,49 @@ class EntropyScheduleCallback(BaseCallback):
         return True
 
 
+# ---
+# Custom Callback to track stability metrics
+# ---
+class StabilityMetricsCallback(BaseCallback):
+    """
+    Tracks additional stability metrics during training.
+    Logs to tensorboard for later analysis.
+    """
+    def __init__(self, verbose=0):
+        super().__init__(verbose)
+        self.episode_rewards = []
+        self.episode_lengths = []
+        
+    def _on_rollout_end(self) -> None:
+        """Called at the end of each rollout (every n_steps * n_envs)"""
+        
+        # Get episode statistics from the buffer
+        if len(self.model.ep_info_buffer) > 0:
+            ep_rewards = [ep_info["r"] for ep_info in self.model.ep_info_buffer]
+            ep_lengths = [ep_info["l"] for ep_info in self.model.ep_info_buffer]
+            
+            # Track mean and std of rewards
+            self.logger.record("stability/reward_mean", np.mean(ep_rewards))
+            self.logger.record("stability/reward_std", np.std(ep_rewards))
+            self.logger.record("stability/reward_min", np.min(ep_rewards))
+            self.logger.record("stability/reward_max", np.max(ep_rewards))
+            
+            # Track episode lengths
+            self.logger.record("stability/ep_len_mean", np.mean(ep_lengths))
+            self.logger.record("stability/ep_len_std", np.std(ep_lengths))
+            
+            # Calculate success rate from info_keywords
+            success_count = sum([1 for ep in self.model.ep_info_buffer 
+                               if ep.get("arrive_dest", False)])
+            success_rate = success_count / len(self.model.ep_info_buffer) if len(self.model.ep_info_buffer) > 0 else 0
+            self.logger.record("stability/success_rate", success_rate)
+        
+        return True
+    
+    def _on_step(self) -> bool:
+        return True
+
+
 
 def create_env(config, log_dir=None, seed=0):
     """
@@ -140,7 +185,7 @@ def train(
     # --- Hyperparameter Schedules ---
     LR_START = 1.51e-5
     LR_END = 1e-6
-    ENT_START = 0.0425
+    ENT_START = 0.029
     ENT_END = 0.0
 
     # ---
@@ -155,12 +200,15 @@ def train(
         "ent_coef": ENT_START,
         
         # Static Parameters (from Optuna)
-        "batch_size": 128,
-        "n_steps": 2048,      # Explicitly override N_STEPS
+        "n_steps": 4096,      # Explicitly override N_STEPS
         "gamma": 0.9999,      # High gamma for long-term survival
         "gae_lambda": 0.9,    # Lower variance
-        "clip_range": 0.3,    # Faster learning
-        "n_epochs": 20        # Squeeze more out of data
+        "clip_range": 0.2,    # Faster learning
+        "n_epochs": 5,        # lower = more stable 
+
+        # Manual tuning
+        "batch_size": 256,    # Optuna: 128, changed to 256 for stability (larger = more stable)
+
     }
 
     # MODEL_PARAMS = {

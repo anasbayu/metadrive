@@ -6,7 +6,7 @@ from src.experiment.rl.train_ppo import train, evaluate_model
 
 # === EXPERIMENTS CONFIG ===
 ALGORITHMS_TO_TEST = ["PPO"]     # ["PPO", "LeakyPPO"]
-SEEDS = [1]  # (5 runs per algorithm)
+SEEDS = [2]  # (5 runs per algorithm)
 REAL_TIMESTEPS = 30_000_000
 EVAL_EPISODES = 50
 
