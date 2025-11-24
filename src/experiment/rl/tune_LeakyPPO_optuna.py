@@ -21,14 +21,14 @@ torch.serialization.add_safe_globals(safe_globals)
 # ---------------------------
 
 # === CONFIG FOR TUNING ===
-N_TRIALS = 100          # Increase for better optimization
+N_TRIALS = 35          # Increase for better optimization
 N_STARTUP_TRIALS = 10   # More startup trials before pruning
 N_EVALUATIONS = 5       # Evaluate 5 times during training
-TIMESTEPS_PER_TRIAL = 3_000_000  # 3M steps per trial (balance speed vs quality)
+TIMESTEPS_PER_TRIAL = 6_000_000  # 6M steps per trial
 NUM_ENV = 5
 EVAL_EPISODES = 10      # Episodes per evaluation
-STUDY_NAME = "leaky_ppo_metadrive_optuna"
-STORAGE_URL = "sqlite:///optuna_leaky_ppo.db"
+STUDY_NAME = "leaky_ppo_metadrive_optuna_6M"
+STORAGE_URL = "sqlite:///optuna_leaky_ppo_6M.db"
 # =========================
 
 # Training config (match your main script)
@@ -369,10 +369,9 @@ def run_optimization():
     return study
 
 
-if __name__ == "__main__":
+def main():
     study = run_optimization()
     
-    # Optional: Print optimization history
     print("\nTop 5 Trials:")
     print(f"{'Trial':<8} {'Reward':<12} {'State':<12}")
     print("-" * 32)
@@ -385,3 +384,6 @@ if __name__ == "__main__":
     
     for trial in sorted_trials:
         print(f"{trial.number:<8} {trial.value:<12.2f} {trial.state.name:<12}")
+
+if __name__ == "__main__":
+    main()
