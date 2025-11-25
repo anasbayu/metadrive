@@ -1,8 +1,7 @@
 import optuna
 from optuna.pruners import MedianPruner
 from optuna.samplers import TPESampler
-# from stable_baselines3 import PPO
-from src.leaky_PPO import LeakyPPO
+from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.vec_env import SubprocVecEnv
 from stable_baselines3.common.utils import set_random_seed
@@ -27,8 +26,8 @@ N_EVALUATIONS = 3       # Evaluate 3 times during training
 TIMESTEPS_PER_TRIAL = 1_500_000  # 1.5M steps per trial
 NUM_ENV = 5
 EVAL_EPISODES = 5       # Episodes per evaluation
-STUDY_NAME = "leaky_ppo_metadrive_optuna_1.5M"
-STORAGE_URL = "sqlite:///optuna_leaky_ppo_1.5M.db"
+STUDY_NAME = "ppo_metadrive_optuna_1.5M"
+STORAGE_URL = "sqlite:///optuna_ppo_1.5M.db"
 # =========================
 
 # Training config (match your main script)
@@ -143,7 +142,6 @@ def objective(trial: optuna.Trial) -> float:
     clip_range = trial.suggest_float("clip_range", 0.1, 0.3)
     n_epochs = trial.suggest_int("n_epochs", 3, 10)
     max_grad_norm = trial.suggest_float("max_grad_norm", 0.3, 1.0)
-    alpha = trial.suggest_float("alpha", 0.0, 0.1)
     
     # Use a unique seed per trial for reproducibility
     trial_seed = trial.number
@@ -160,7 +158,6 @@ def objective(trial: optuna.Trial) -> float:
     print(f"  clip_range:     {clip_range:.2f}")
     print(f"  n_epochs:       {n_epochs}")
     print(f"  max_grad_norm:  {max_grad_norm:.2f}")
-    print(f"  alpha:          {alpha:.4f}")
     print(f"{'='*60}\n")
     
     # ========================================
@@ -189,7 +186,7 @@ def objective(trial: optuna.Trial) -> float:
     )
     
     try:
-        model = LeakyPPO(
+        model = PPO(
             policy="MlpPolicy",
             env=train_env,
             learning_rate=learning_rate,
@@ -201,7 +198,6 @@ def objective(trial: optuna.Trial) -> float:
             clip_range=clip_range,
             n_epochs=n_epochs,
             max_grad_norm=max_grad_norm,
-            alpha=alpha,  # ADD THIS
             policy_kwargs=policy_kwargs,
             verbose=0,
             seed=trial_seed
@@ -287,7 +283,7 @@ def run_optimization():
     """Run Optuna optimization study."""
     
     print(f"\n{'='*70}")
-    print(f"  STARTING HYPERPARAMETER OPTIMIZATION")
+    print(f"  STARTING PPO HYPERPARAMETER OPTIMIZATION")
     print(f"{'='*70}")
     print(f"Study Name:     {STUDY_NAME}")
     print(f"Storage:        {STORAGE_URL}")

@@ -3,8 +3,8 @@ import multiprocessing as mp
 import sys
 
 from src.experiment.rl.run_experiments import run_all_experiments
-import src.experiment.rl.tune_leakyPPO_optuna as tune_leakyPPO
-import src.experiment.rl.tune_ppo_optuna as tune_ppo
+import src.experiment.rl.tune_LeakyPPO_optuna as tune_leakyPPO
+import src.experiment.rl.tune_PPO_optuna as tune_ppo
 
 def main():
     parser = argparse.ArgumentParser(description="MetaDrive Experiment Runner")
@@ -27,6 +27,12 @@ def main():
         "--tune-leaky-ppo", 
         action="store_true", 
         help="Run Optuna hyperparameter tuning for LeakyPPO."
+    )
+
+    group.add_argument(
+        "--compare-results", 
+        action="store_true", 
+        help="Compare the best hyperparameters from PPO and LeakyPPO tuning."
     )
 
     args = parser.parse_args()
@@ -52,6 +58,14 @@ def main():
             tune_leakyPPO.main()
         else:
             print("Error: src.experiment.rl.tune_leakyPPO_optuna has no 'main()' function.")
+
+    elif args.compare_results:
+        print(">>> Comparing Best Hyperparameters from PPO and LeakyPPO Tuning...")
+        import src.experiment.rl.compare_optuna_result as compare_optuna_result
+        if hasattr(compare_optuna_result, 'main'):
+            compare_optuna_result.main()
+        else:
+            print("Error: src.experiment.rl.compare_optuna_result has no 'main()' function.")
 
     print("\n>>> Execution Finished.")
 
