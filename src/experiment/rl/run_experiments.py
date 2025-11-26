@@ -5,68 +5,92 @@ import os
 from src.experiment.rl.train_ppo import train, evaluate_model 
 
 # === EXPERIMENTS CONFIG ===
-ALGORITHMS_TO_TEST = ["PPO"]     # ["PPO", "LeakyPPO"]
-SEEDS = [2]  # (5 runs per algorithm)
-REAL_TIMESTEPS = 30_000_000
-EVAL_EPISODES = 50
+ALGORITHMS_TO_TEST = ["PPO", "LeakyPPO"]     # ["PPO", "LeakyPPO"]
+SEEDS = [0, 5, 10, 15, 20]  # 5 seeds for statistical significance (per algorithm)
+TIMESTEPS  = 15_000_000
+EVAL_EPISODES = 100 # RLiable recommends at least 100 episodes for evaluation
 
 def run_all_experiments():
     """
     Runs training and evaluation for all algorithms and seeds.
     Stores all results in a JSON file for RLiable analysis.
     """
-    # A dictionary to store all scores for RLiable
-    all_scores = {}
+    all_scores = {}     # A dictionary to store all scores for RLiable
 
-    print("===== STARTING EXPERIMENT SUITE =====")
-    print(f"Total Timesteps: {REAL_TIMESTEPS}")
-    print(f"Eval Episodes:   {EVAL_EPISODES}")
+    print("\n" + "="*70)
+    print("  EXPERIMENT SUITE - OPTUNA-OPTIMIZED TRAINING")
+    print("="*70)
+    print(f"  Algorithms:    {', '.join(ALGORITHMS_TO_TEST)}")
+    print(f"  Seeds:         {SEEDS}")
+    print(f"  Timesteps:     {TIMESTEPS:,}")
+    print(f"  Eval Episodes: {EVAL_EPISODES}")
+    print("="*70 + "\n")
 
     for algo_name in ALGORITHMS_TO_TEST:
-        print(f"\n===== STARTING RUNS FOR: {algo_name} =====")
+        print(f"\n{'='*70}")
+        print(f"  ALGORITHM: {algo_name}")
+        print(f"{'='*70}\n")
+
         all_scores[algo_name] = [] # Initialize list for this algo
 
         for seed in SEEDS:
             # 1. TRAIN
-            experiment_name = f"{algo_name}_seed_{seed}"
-            print(f"\n--- Training {experiment_name} ---")
+            experiment_name = f"{algo_name}_optuna_seed_{seed}"
+            print(f"\n>>> Training {experiment_name}")
             
             model_path = train(
                 algo_name=algo_name,
                 experiment_seed=seed,
                 experiment_name=experiment_name,
-                total_timesteps=REAL_TIMESTEPS,
-                leaky_alpha=0.01        # Only used if algo_name is 'LeakyPPO'
+                total_timesteps=TIMESTEPS,
+                leaky_alpha=None        # Will be loaded from Optuna results
             )
             
             # 2. EVALUATE
-            print(f"\n--- Evaluating {experiment_name} ---")
+            print(f"\n>>> Evaluating {experiment_name}")
             
             scores_for_this_seed = evaluate_model(
                 model_path=model_path,
                 algo_name=algo_name,
                 num_episodes=EVAL_EPISODES
             )
-            
+
             # 3. STORE RESULTS
             all_scores[algo_name].append(scores_for_this_seed)
+            
 
-    print("\n===== EXPERIMENT SUITE FINISHED =====")
+    print("\n" + "="*70)
+    print("  EXPERIMENT SUITE COMPLETE")
+    print("="*70 + "\n")
 
     # 4. SAVE SCORES FOR RLIABLE
-    output_file = "all_experiment_scores.json"
+    output_file = "optuna_experiment_results.json"
     print(f"Saving all scores to {output_file}...")
 
-    # Convert numpy arrays to lists for JSON serialization
+    # Convert to serializable format
     scores_for_json = {
-        key: np.array(value).tolist() for key, value in all_scores.items()
+        key: [[float(score) for score in seed_scores] for seed_scores in value]
+        for key, value in all_scores.items()
     }
 
     with open(output_file, 'w') as f:
         json.dump(scores_for_json, f, indent=4)
 
-    print("Done. You can now load 'all_experiment_scores.json' into RLiable.")
 
+    # Print summary
+    print("\n" + "="*70)
+    print("  SUMMARY")
+    print("="*70)
+    for algo_name, scores in all_scores.items():
+        flat_scores = np.array(scores).flatten()
+        print(f"\n{algo_name}:")
+        print(f"  Total Episodes: {len(flat_scores)}")
+        print(f"  Mean Reward:    {flat_scores.mean():.2f} ± {flat_scores.std():.2f}")
+        print(f"  Median Reward:  {np.median(flat_scores):.2f}")
+    print("="*70 + "\n")
+    
+    print(f"✅ Results saved to '{output_file}'")
+    print("   You can now analyze with RLiable!")
 
 if __name__ == "__main__":
     run_all_experiments()

@@ -35,6 +35,12 @@ def main():
         help="Compare the best hyperparameters from PPO and LeakyPPO tuning."
     )
 
+    group.add_argument(
+        "--analyze-rliable", 
+        action="store_true", 
+        help="Run RLiable analysis on the results."
+    )
+
     args = parser.parse_args()
 
     # 2. Execute the selected function
@@ -67,6 +73,13 @@ def main():
         else:
             print("Error: src.experiment.rl.compare_optuna_result has no 'main()' function.")
 
+    elif args.analyze_rliable:
+        print(">>> Starting RLiable Analysis...")
+        import src.experiment.analyze_with_rliable as analyze_with_rliable
+        if hasattr(analyze_with_rliable, 'main'):
+            analyze_with_rliable.main()
+        else:
+            print("Error: src.experiment.analyze_with_rliable has no 'main()' function.")
     print("\n>>> Execution Finished.")
 
 if __name__ == "__main__":
