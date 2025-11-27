@@ -5,8 +5,8 @@ from metadrive.envs.metadrive_env import MetaDriveEnv
 import os
 
 # ================= CONFIGURATION =================
-MODEL_PATH = "./file/models/bc_agent_forced2d.pth"
-STATS_PATH = "./file/models/normalization_stats.npz"
+MODEL_PATH = "./file/bc/models/bc_agent_forced2d.pth"
+STATS_PATH = "./file/bc/models/normalization_stats.npz"
 EVAL_EPISODES = 20
 RENDER = True  # Set to False for faster evaluation
 # =================================================
@@ -40,7 +40,6 @@ def evaluate_agent():
     print("✅ Stats loaded.")
 
     # 2. Setup Environment
-    # Note: We use 0 traffic to match your specific training optimization
     env = MetaDriveEnv(dict(
         use_render=RENDER,
         manual_control=False,
