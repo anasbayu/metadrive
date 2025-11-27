@@ -6,13 +6,13 @@ from metadrive.policy.idm_policy import IDMPolicy
 import time
 
 # ============== CONFIGURATIONS =============
-DATA_TO_REPLAY = "file/expert_data/expert_metadrive_buffer_3.npz"
+DATA_TO_REPLAY = "file/expert_data/expert_metadrive_500k_1200eps_with_recovery_v3.npz"
+# DATA_TO_REPLAY = "file/expert_data/expert_metadrive_buffer_3.npz"
 
 
 REPLAY_CONFIG = {
     "use_render": True,
     "manual_control": False,
-    "agent_policy": IDMPolicy, 
     "num_scenarios": 100,
     "start_seed": 0,
     "traffic_density": 0.0, 
@@ -47,7 +47,7 @@ def replay_data():
     obs, info = env.reset()
     
     for i in range(len(actions)):
-        action = actions[i]
+        action = actions[i][0]
         is_done_from_data = dones[i]
         
         obs, reward, terminated, truncated, info = env.step(action)

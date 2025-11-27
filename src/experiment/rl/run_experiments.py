@@ -4,8 +4,12 @@ import os
 
 from src.experiment.rl.train_ppo import train, evaluate_model 
 
+# ================= BC WARMSTART CONFIGURATION =================
+BC_MODEL_PATH = "./file/models/bc_agent_forced2d.pth"
+BC_STATS_PATH = "./file/models/normalization_stats.npz"
+
 # === EXPERIMENTS CONFIG ===
-ALGORITHMS_TO_TEST = ["PPO", "LeakyPPO"]     # ["PPO", "LeakyPPO"]
+ALGORITHMS_TO_TEST = ["PPO_Warmstart", "LeakyPPO_Warmstart"]     # ["PPO", "LeakyPPO", "PPO_Warmstart", "LeakyPPO_Warmstart"]
 SEEDS = [0, 5, 10, 15, 20]  # 5 seeds for statistical significance (per algorithm)
 TIMESTEPS  = 15_000_000
 EVAL_EPISODES = 100 # RLiable recommends at least 100 episodes for evaluation
@@ -34,6 +38,11 @@ def run_all_experiments():
         all_scores[algo_name] = [] # Initialize list for this algo
 
         for seed in SEEDS:
+            # Setup paths only if it's the warmstart variant
+            bc_model = BC_MODEL_PATH if algo_name == "PPO_Warmstart" else None
+            bc_stats = BC_STATS_PATH if algo_name == "PPO_Warmstart" else None
+
+
             # 1. TRAIN
             experiment_name = f"{algo_name}_optuna_seed_{seed}"
             print(f"\n>>> Training {experiment_name}")
@@ -43,7 +52,9 @@ def run_all_experiments():
                 experiment_seed=seed,
                 experiment_name=experiment_name,
                 total_timesteps=TIMESTEPS,
-                leaky_alpha=None        # Will be loaded from Optuna results
+                leaky_alpha=None,        # Will be loaded from Optuna results
+                bc_model_path=bc_model,
+                bc_stats_path=bc_stats,
             )
             
             # 2. EVALUATE
