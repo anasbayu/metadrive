@@ -1,8 +1,11 @@
 import os
 import json
 import numpy as np
+import torch
+import torch.nn as nn
 from metadrive.envs.metadrive_env import MetaDriveEnv
 from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
+from stable_baselines3.common.vec_env import VecNormalize, DummyVecEnv
 from stable_baselines3.common.callbacks import BaseCallback, CallbackList, CheckpointCallback
 from stable_baselines3.common.utils import set_random_seed
 from functools import partial
@@ -14,24 +17,45 @@ from src.leaky_PPO import LeakyPPO
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.logger import configure
 
+
+# ============== BC AGENT STRUCTURE (For Loading) ==============
+class BCAgent(nn.Module):
+    def __init__(self, obs_dim, act_dim):
+        super(BCAgent, self).__init__()
+        self.net = nn.Sequential(
+            nn.Linear(obs_dim, 256),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(256, 256),
+            nn.ReLU(),
+            nn.Linear(256, act_dim),
+            nn.Tanh()
+        )
+
+
 # ============== LOAD OPTUNA RESULTS ==============
 def load_optuna_params(algo_name):
     """Load Optuna-optimized hyperparameters."""
-    if algo_name == "PPO":
-        filename = "ppo_metadrive_optuna_1.5M_best_params.json"
-    elif algo_name == "LeakyPPO":
+    # Handle suffixes like _Warmstart
+    # Check Leaky FIRST because "LeakyPPO" contains "PPO"
+    if "LeakyPPO" in algo_name:
+        base_algo = "LeakyPPO"
         filename = "leaky_ppo_metadrive_optuna_1.5M_best_params.json"
+    elif "PPO" in algo_name:
+        base_algo = "PPO"
+        filename = "ppo_metadrive_optuna_1.5M_best_params.json"
     else:
         raise ValueError(f"Unknown algorithm: {algo_name}")
     
     if not os.path.exists(filename):
-        raise FileNotFoundError(f"Optuna results not found: {filename}")
+        print(f"Warning: Optuna file {filename} not found. Using defaults.")
+        return {}
     
     with open(filename, "r") as f:
         params = json.load(f)
     
     print(f"\n{'='*70}")
-    print(f"  LOADED OPTUNA HYPERPARAMETERS FOR {algo_name}")
+    print(f"  LOADED OPTUNA HYPERPARAMETERS FOR {base_algo}")
     print(f"{'='*70}")
     for key, value in params.items():
         print(f"  {key:<20} {value}")
@@ -39,11 +63,12 @@ def load_optuna_params(algo_name):
     
     return params
 
+
 # ============== CONFIGURATIONS =============
 NUM_ENV = 5
 TIMESTEPS = 15_000_000
-PATH_LOG_DIR = "./logs/"
-PATH_SAVED_MODEL_ROOT = "./models/"
+PATH_LOG_DIR = "./logs/warmstarted/"
+PATH_SAVED_MODEL_ROOT = "./models/warmstarted/"
 
 TRAIN_CONFIG = {
     "num_scenarios": 100,
@@ -107,7 +132,7 @@ def create_env(config, log_dir=None, seed=0):
         monitor_log_dir = os.path.join(log_dir, f"monitor_seed_{seed}_pid_{os.getpid()}")
         os.makedirs(monitor_log_dir, exist_ok=True)
         env = Monitor(env, filename=os.path.join(monitor_log_dir, "monitor.csv"), 
-                     info_keywords=("arrive_dest",))
+                      info_keywords=("arrive_dest",))
     else:
         env = Monitor(env, log_dir, info_keywords=("arrive_dest",))
 
@@ -119,22 +144,21 @@ def train(
     experiment_seed: int, 
     experiment_name: str,
     total_timesteps: int = TIMESTEPS,
-    leaky_alpha: float = None  # Will be loaded from Optuna if None
+    leaky_alpha: float = None, 
+    bc_model_path: str = None,
+    bc_stats_path: str = None,
 ):
-    """
-    Train model with Optuna-optimized hyperparameters.
-    """
     set_random_seed(experiment_seed)
 
     # Load Optuna hyperparameters
     optuna_params = load_optuna_params(algo_name)
     
     # Extract alpha for LeakyPPO (if present)
-    if algo_name == "LeakyPPO":
+    if "LeakyPPO" in algo_name:
         if leaky_alpha is None:
-            leaky_alpha = optuna_params.pop("alpha")  # Remove from dict, store separately
+            leaky_alpha = optuna_params.pop("alpha", 0.1) 
         else:
-            optuna_params.pop("alpha", None)  # Remove if exists, use provided value
+            optuna_params.pop("alpha", None) 
 
     # Create directories
     run_log_dir = os.path.join(PATH_LOG_DIR, experiment_name)
@@ -148,8 +172,10 @@ def train(
     print(f"  TRAINING: {experiment_name}")
     print(f"  Seed: {experiment_seed}")
     print(f"  Total Timesteps: {total_timesteps:,}")
-    if algo_name == "LeakyPPO":
-        print(f"  Alpha: {leaky_alpha}")
+    if "LeakyPPO" in algo_name:
+        print(f"  Algorithm: LeakyPPO (alpha={leaky_alpha})")
+    else:
+        print(f"  Algorithm: PPO")
     print(f"{'='*70}\n")
 
     # Create training environment
@@ -157,10 +183,21 @@ def train(
         partial(create_env, TRAIN_CONFIG, run_log_dir, seed=experiment_seed + i) 
         for i in range(NUM_ENV)
     ])
+
+    # 2. Warmstart: Apply Normalization
+    if bc_stats_path and os.path.exists(bc_stats_path):
+        print(f"  [Warmstart] Loading VecNormalize stats from {bc_stats_path}")
+        train_env = VecNormalize(train_env, norm_obs=True, norm_reward=True, clip_obs=10.)
+        stats = np.load(bc_stats_path)
+        train_env.obs_rms.mean = stats["mean"]
+        train_env.obs_rms.var = stats["std"] ** 2
+        train_env.training = True 
+    else:
+        # Optional: You can enable VecNormalize even for non-warmstart if desired
+        pass
     
     logger = configure(run_log_dir, ["stdout", "csv", "json", "tensorboard"])
     
-    # Network architecture (match Optuna training)
     policy_kwargs = dict(
         net_arch=dict(pi=[256, 256], vf=[256, 256])
     )
@@ -170,8 +207,7 @@ def train(
         save_freq=500_000 // NUM_ENV,
         save_path=path_checkpoint,
         name_prefix=f"{algo_name.lower()}_checkpoint",
-        save_replay_buffer=False,
-        save_vecnormalize=False
+        save_vecnormalize=True
     )
     
     stability_callback = StabilityMetricsCallback()
@@ -186,25 +222,47 @@ def train(
         "policy_kwargs": policy_kwargs,
         "tensorboard_log": PATH_LOG_DIR,
         "seed": experiment_seed,
-        **optuna_params  # ✅ Use Optuna hyperparameters
+        **optuna_params 
     }
 
-    # Create model
-    if algo_name == "PPO":
-        print("Instantiating standard PPO...")
-        model = PPO(**common_params)
-        
-    elif algo_name == "LeakyPPO":
+    # Create model (Robust String Check)
+    if "LeakyPPO" in algo_name:
         print(f"Instantiating LeakyPPO (alpha={leaky_alpha})...")
         model = LeakyPPO(
             **common_params,
             alpha=leaky_alpha
         )
+    elif "PPO" in algo_name:
+        print("Instantiating standard PPO...")
+        model = PPO(**common_params)
     else:
         raise ValueError(f"Unknown algorithm: {algo_name}. Must be 'PPO' or 'LeakyPPO'.")
 
     model.set_logger(logger)
     
+
+    # 4. Warmstart: Brain Transplant
+    if bc_model_path and os.path.exists(bc_model_path):
+        print(f"  [Warmstart] Transplanting BC weights from {bc_model_path}...")
+        obs_dim = train_env.observation_space.shape[0]
+        act_dim = train_env.action_space.shape[0]
+        bc_model = BCAgent(obs_dim, act_dim)
+        try:
+            bc_model.load_state_dict(torch.load(bc_model_path, map_location="cpu"))
+            with torch.no_grad():
+                # Layer 1
+                model.policy.mlp_extractor.policy_net[0].weight.data.copy_(bc_model.net[0].weight.data)
+                model.policy.mlp_extractor.policy_net[0].bias.data.copy_(bc_model.net[0].bias.data)
+                # Layer 2 (Skipping ReLU/Dropout indices 1,2 of BC net)
+                model.policy.mlp_extractor.policy_net[2].weight.data.copy_(bc_model.net[3].weight.data)
+                model.policy.mlp_extractor.policy_net[2].bias.data.copy_(bc_model.net[3].bias.data)
+                # Output Layer
+                model.policy.action_net.weight.data.copy_(bc_model.net[5].weight.data)
+                model.policy.action_net.bias.data.copy_(bc_model.net[5].bias.data)
+            print("  [Warmstart] Weights transplanted successfully!")
+        except Exception as e:
+            print(f"  [Warmstart] ERROR transplanting weights: {e}")
+
     # Train
     print(f"Starting training...")
     model.learn(
@@ -217,6 +275,12 @@ def train(
     # Save final model
     final_model_path = os.path.join(PATH_SAVED_MODEL_ROOT, f"{experiment_name}_final.zip")
     model.save(final_model_path)
+
+    # Save VecNormalize stats if used
+    if isinstance(train_env, VecNormalize):
+        stats_path = os.path.join(PATH_SAVED_MODEL_ROOT, f"{experiment_name}_vecnormalize.pkl")
+        train_env.save(stats_path)
+        print(f"  Saved VecNormalize stats to {stats_path}")
 
     train_env.close()
 
@@ -247,14 +311,27 @@ def evaluate_model(model_path: str, algo_name: str, num_episodes=100):
     except Exception:
         pass
         
-    eval_env = MetaDriveEnv(EVAL_CONFIG)
+    # Determine if there is a corresponding VecNormalize file
+    vec_norm_path = model_path.replace("_final.zip", "_vecnormalize.pkl")
+    use_norm = os.path.exists(vec_norm_path)
+    
+    if use_norm:
+        print(f"  Found VecNormalize stats: {vec_norm_path}")
+        # To use VecNormalize, we need a VecEnv (even if it's size 1)
+        eval_env = DummyVecEnv([partial(create_env, EVAL_CONFIG)])
+        eval_env = VecNormalize.load(vec_norm_path, eval_env)
+        eval_env.training = False # Do not update stats during eval
+        eval_env.norm_reward = False # Return raw rewards for metric tracking
+    else:
+        eval_env = MetaDriveEnv(EVAL_CONFIG)
 
-    # Load model
+
+    # Load model (Check Leaky FIRST)
     print(f"Loading {algo_name} model...")
-    if algo_name == "PPO":
-        model = PPO.load(model_path)
-    elif algo_name == "LeakyPPO":
+    if "LeakyPPO" in algo_name:
         model = LeakyPPO.load(model_path, env=eval_env)
+    elif "PPO" in algo_name:
+        model = PPO.load(model_path, env=eval_env)
     else:
         raise ValueError(f"Unknown algorithm: {algo_name}")
     
@@ -265,16 +342,26 @@ def evaluate_model(model_path: str, algo_name: str, num_episodes=100):
     print(f"Running {num_episodes} evaluation episodes...")
     
     for ep in range(num_episodes):
-        obs, info = eval_env.reset()
+        obs = eval_env.reset()
+        if not use_norm: obs = obs[0] # Handle non-vec env tuple return
+
         episode_reward = 0
         episode_length = 0
-        terminated = False
-        truncated = False
+        done = False
         
-        while not (terminated or truncated):
+        while not done:
             action, _states = model.predict(obs, deterministic=True)
-            obs, reward, terminated, truncated, info = eval_env.step(action)
-            episode_reward += reward
+
+            if use_norm:
+                obs, reward, dones, infos = eval_env.step(action)
+                done = dones[0]
+                episode_reward += reward[0] 
+                info = infos[0]
+            else:
+                obs, reward, terminated, truncated, info = eval_env.step(action)
+                done = terminated or truncated
+                episode_reward += reward
+                
             episode_length += 1
         
         episode_rewards.append(episode_reward)
@@ -293,6 +380,7 @@ def evaluate_model(model_path: str, algo_name: str, num_episodes=100):
     std_reward = np.std(episode_rewards)
     success_rate = success_count / num_episodes
     
+    # === EXACT LOGGING FORMAT REQUESTED ===
     print(f"\n{'='*70}")
     print(f"  EVALUATION COMPLETE")
     print(f"{'='*70}")
