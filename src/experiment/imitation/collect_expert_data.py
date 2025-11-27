@@ -6,10 +6,10 @@ from metadrive.policy.idm_policy import IDMPolicy
 from stable_baselines3.common.buffers import ReplayBuffer
 
 # ============== CONFIGURATIONS =============
-NUM_EPISODES_TO_RECORD = 100  
+NUM_EPISODES_TO_RECORD = 1200
 DATA_SAVE_PATH = "./file/expert_data/"
-BUFFER_SIZE = 200_000  # number of data collected
-EXPORT_NAME = "expert_metadrive_buffer_3"
+BUFFER_SIZE = 500_000  # number of data collected
+EXPORT_NAME = "expert_metadrive_500k_1200eps"
 
 COLLECT_CONFIG = {
     "use_render": False,     # Fast mode (no graphics)
