@@ -31,4 +31,5 @@ apt-get install -y libglib2.0-0
 
 
 ## Collecting expert data
-In this research, I use MetaDrive own IDMPolicy for the expert data. To collect the expert_data.npz file (neede to train for BC), run the *./src/experiment/imitation/collect_expert_data.py*.
+- In this research, I use MetaDrive own IDMPolicy for the expert data. To collect the expert_data.npz file (needed to train the BC model), run the *./src/experiment/imitation/collect/collect_expert_data.py*.
+- to visualize the expert data, run *./src/experiment/imitation/visualizer/visualize_expert_data_v2.py*.

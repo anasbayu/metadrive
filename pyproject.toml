@@ -22,4 +22,5 @@ dependencies = [
     "rliable>=1.2.0",
     "plotly>=6.5.0",
     "kaleido>=1.2.0",
+    "scikit-learn>=1.7.2",
 ]

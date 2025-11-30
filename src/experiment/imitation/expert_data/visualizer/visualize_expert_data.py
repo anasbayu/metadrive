@@ -4,7 +4,7 @@ import os
 
 # ================= CONFIGURATION =================
 # Path to your clean expert dataset
-DATA_PATH = "./file/expert_data/expert_metadrive_500k_clean.npz"
+DATA_PATH = "./file/expert_data/expert_metadrive_500k_1000scenarios_fixed.npz"
 # =================================================
 
 def visualize():
