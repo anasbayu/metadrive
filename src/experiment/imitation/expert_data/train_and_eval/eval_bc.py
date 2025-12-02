@@ -5,7 +5,7 @@ import torch
 import gymnasium as gym
 
 # ================= CONFIGURATION =================
-MODEL_PATH = "./file/model/bc_policy_metadrive_v4" # Path to your saved model
+MODEL_PATH = "./file/model/bc_256.zip"
 EVAL_EPISODES = 50  # Run enough episodes to get a statistically valid score
 TRAFFIC_DENSITY = 0.15 # Match your training density
 # =================================================
@@ -74,8 +74,8 @@ def evaluate():
             # --- DEBUG HACK: Force Forward Motion ---
             # If the model outputs < 0.1 throttle, force it to 0.3
             # Index 1 is throttle/brake in MetaDrive
-            if action[1] < 0.1:
-                action[1] = 0.3 
+            # if action[1] < 0.1:
+            #     action[1] = 0.3 
             # ----------------------------------------
 
             obs, reward, done, truncated, info = env.step(action)

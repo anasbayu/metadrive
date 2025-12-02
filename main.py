@@ -3,8 +3,8 @@ import multiprocessing as mp
 import sys
 
 from src.experiment.rl.run_experiments import run_all_experiments
-import src.experiment.rl.tune_LeakyPPO_optuna as tune_leakyPPO
-import src.experiment.rl.tune_PPO_optuna as tune_ppo
+import src.experiment.rl.optuna_tuning.tune_LeakyPPO_optuna as tune_leakyPPO
+import src.experiment.rl.optuna_tuning.tune_PPO_optuna as tune_ppo
 
 def main():
     parser = argparse.ArgumentParser(description="MetaDrive Experiment Runner")

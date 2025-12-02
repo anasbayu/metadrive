@@ -17,20 +17,11 @@ from src.leaky_PPO import LeakyPPO
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.logger import configure
 
-
-# ============== BC AGENT STRUCTURE (For Loading) ==============
-class BCAgent(nn.Module):
-    def __init__(self, obs_dim, act_dim):
-        super(BCAgent, self).__init__()
-        self.net = nn.Sequential(
-            nn.Linear(obs_dim, 256),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(256, 256),
-            nn.ReLU(),
-            nn.Linear(256, act_dim),
-            nn.Tanh()
-        )
+# Imitation library for BC warmstart
+from imitation.algorithms import bc
+from imitation.data import rollout
+from imitation.data.types import Transitions
+from stable_baselines3.ppo import MlpPolicy
 
 
 # ============== LOAD OPTUNA RESULTS ==============
@@ -140,14 +131,14 @@ def create_env(config, log_dir=None, seed=0):
 
 # ============== TRAINING FUNCTION =============
 def train(
-    algo_name: str,
-    experiment_seed: int, 
-    experiment_name: str,
-    total_timesteps: int = TIMESTEPS,
-    leaky_alpha: float = None, 
-    bc_model_path: str = None,
-    bc_stats_path: str = None,
-):
+        algo_name: str,
+        experiment_seed: int, 
+        experiment_name: str,
+        total_timesteps: int = TIMESTEPS,
+        leaky_alpha: float = None, 
+        bc_model_path: str = None,
+        bc_stats_path: str = None,
+    ):
     set_random_seed(experiment_seed)
 
     # Load Optuna hyperparameters
@@ -241,27 +232,41 @@ def train(
     model.set_logger(logger)
     
 
-    # 4. Warmstart: Brain Transplant
+    # 4. Warmstart: Brain Transplant (Imitation Library Compatible)
     if bc_model_path and os.path.exists(bc_model_path):
-        print(f"  [Warmstart] Transplanting BC weights from {bc_model_path}...")
-        obs_dim = train_env.observation_space.shape[0]
-        act_dim = train_env.action_space.shape[0]
-        bc_model = BCAgent(obs_dim, act_dim)
+        print(f"  [Warmstart] Loading Imitation/SB3 policy from {bc_model_path}...")
+        
         try:
-            bc_model.load_state_dict(torch.load(bc_model_path, map_location="cpu"))
-            with torch.no_grad():
-                # Layer 1
-                model.policy.mlp_extractor.policy_net[0].weight.data.copy_(bc_model.net[0].weight.data)
-                model.policy.mlp_extractor.policy_net[0].bias.data.copy_(bc_model.net[0].bias.data)
-                # Layer 2 (Skipping ReLU/Dropout indices 1,2 of BC net)
-                model.policy.mlp_extractor.policy_net[2].weight.data.copy_(bc_model.net[3].weight.data)
-                model.policy.mlp_extractor.policy_net[2].bias.data.copy_(bc_model.net[3].bias.data)
-                # Output Layer
-                model.policy.action_net.weight.data.copy_(bc_model.net[5].weight.data)
-                model.policy.action_net.bias.data.copy_(bc_model.net[5].bias.data)
+            # === FIX START: Handle PyTorch 2.6+ Security Change ===
+            import functools
+            
+            # Create a custom loader that forces weights_only=False
+            # This is safe because YOU created the BC model file.
+            custom_load = functools.partial(torch.load, weights_only=False)
+
+            # We temporarily swap torch.load with our custom version
+            original_load = torch.load
+            torch.load = custom_load
+            
+            try:
+                # Now this call uses the modified torch.load internally
+                bc_policy = model.policy_class.load(bc_model_path, device="cpu")
+            finally:
+                # Restore the original torch.load immediately after
+                torch.load = original_load
+            # === FIX END ===
+
+            # Extract the state dictionary
+            bc_weights = bc_policy.state_dict()
+            
+            # Load these weights into your new PPO model
+            model.policy.load_state_dict(bc_weights, strict=False)
+            
             print("  [Warmstart] Weights transplanted successfully!")
+
         except Exception as e:
-            print(f"  [Warmstart] ERROR transplanting weights: {e}")
+            print(f"  [Warmstart] CRITICAL ERROR loading BC weights: {e}")
+            raise e
 
     # Train
     print(f"Starting training...")

@@ -5,8 +5,8 @@ import os
 from src.experiment.rl.train_ppo import train, evaluate_model 
 
 # ================= BC WARMSTART CONFIGURATION =================
-BC_MODEL_PATH = "./file/models/bc_agent_forced2d.pth"
-BC_STATS_PATH = "./file/models/normalization_stats.npz"
+BC_MODEL_PATH = "./file/model/bc_256.zip"
+BC_STATS_PATH = None
 
 # === EXPERIMENTS CONFIG ===
 ALGORITHMS_TO_TEST = ["PPO_Warmstart", "LeakyPPO_Warmstart"]     # ["PPO", "LeakyPPO", "PPO_Warmstart", "LeakyPPO_Warmstart"]
@@ -39,12 +39,12 @@ def run_all_experiments():
 
         for seed in SEEDS:
             # Setup paths only if it's the warmstart variant
-            bc_model = BC_MODEL_PATH if algo_name == "PPO_Warmstart" else None
-            bc_stats = BC_STATS_PATH if algo_name == "PPO_Warmstart" else None
+            bc_model = BC_MODEL_PATH if algo_name == "PPO_Warmstart" or algo_name == "LeakyPPO_Warmstart" else None
+            bc_stats = BC_STATS_PATH if algo_name == "PPO_Warmstart" or algo_name == "LeakyPPO_Warmstart" else None
 
 
             # 1. TRAIN
-            experiment_name = f"{algo_name}_optuna_seed_{seed}"
+            experiment_name = f"{algo_name}_optuna_seed_{seed}_warmstart" if bc_model else f"{algo_name}_optuna_seed_{seed}"
             print(f"\n>>> Training {experiment_name}")
             
             model_path = train(
@@ -75,7 +75,7 @@ def run_all_experiments():
     print("="*70 + "\n")
 
     # 4. SAVE SCORES FOR RLIABLE
-    output_file = "optuna_experiment_results.json"
+    output_file = "optuna_experiment_results_warmstart.json"
     print(f"Saving all scores to {output_file}...")
 
     # Convert to serializable format

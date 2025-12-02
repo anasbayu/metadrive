@@ -7,11 +7,12 @@ from stable_baselines3.common.policies import ActorCriticPolicy
 import imitation.algorithms.bc as bc
 from imitation.data.types import Transitions
 from sklearn.model_selection import train_test_split
+import functools
 
 # ================= CONFIGURATION =================
 EXPERT_DATA_PATH = "./file/expert_data/expert_metadrive_500k_noisy_v5.npz"
-MODEL_SAVE_PATH = "./file/model/bc_policy_metadrive_v5"
-BEST_POLICY_PATH = "./file/model/bc_policy_best.zip"
+MODEL_SAVE_PATH = "./file/model/bc_256.zip"
+BEST_POLICY_PATH = "./file/model/bc_256_policy_best.zip"
 TRAFFIC_DENSITY = 0.15  # Must match collection density
 SEED = 42
 BATCH_SIZE = 64
@@ -115,7 +116,7 @@ def train():
             observation_space=env.observation_space,
             action_space=env.action_space,
             lr_schedule=lambda _: 1e-4,
-            net_arch=[400, 300] # Network architecture (DDPG use this size)
+            net_arch=[256, 256] # Network architecture (DDPG use this size)
         )
     )
     
@@ -179,7 +180,20 @@ def train():
         
     # RELOAD the best checkpoint from disk
     print("\nLoading best model for evaluation...")
-    bc_trainer.policy = ActorCriticPolicy.load(BEST_POLICY_PATH)
+    # bc_trainer.policy = ActorCriticPolicy.load(BEST_POLICY_PATH)
+
+    # Create a custom loader that forces weights_only=False
+    custom_load = functools.partial(torch.load, weights_only=False)
+    
+    # Swap, Load, Restore
+    original_load = torch.load
+    torch.load = custom_load
+    try:
+        best_policy_loaded = ActorCriticPolicy.load(BEST_POLICY_PATH)
+        bc_trainer.policy.load_state_dict(best_policy_loaded.state_dict())
+        print("✓ Best policy weights loaded successfully.")
+    finally:
+        torch.load = original_load
 
     
     # 5. Evaluate
