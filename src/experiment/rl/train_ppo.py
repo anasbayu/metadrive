@@ -58,8 +58,8 @@ def load_optuna_params(algo_name):
 # ============== CONFIGURATIONS =============
 NUM_ENV = 5
 TIMESTEPS = 15_000_000
-PATH_LOG_DIR = "./logs/warmstarted/"
-PATH_SAVED_MODEL_ROOT = "./models/warmstarted/"
+PATH_LOG_DIR = "./logs/retune/"
+PATH_SAVED_MODEL_ROOT = "./models/retune/"
 
 TRAIN_CONFIG = {
     "num_scenarios": 100,
@@ -116,7 +116,15 @@ class StabilityMetricsCallback(BaseCallback):
 # ============== HELPER FUNCTIONS =============
 def create_env(config, log_dir=None, seed=0):
     """Create and configure MetaDrive environment."""
-    env = MetaDriveEnv(config)
+    env_config = config.copy()
+
+    num_scenarios = env_config.get("num_scenarios", 1)
+    start_seed_range = env_config.get("start_seed", 0)
+
+    safe_seed = start_seed_range + (seed % num_scenarios)
+
+    env = MetaDriveEnv(env_config)
+    env.reset(seed=safe_seed)
     env.action_space.seed(seed)
 
     if log_dir:

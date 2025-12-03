@@ -5,12 +5,13 @@ import os
 from src.experiment.rl.train_ppo import train, evaluate_model 
 
 # ================= BC WARMSTART CONFIGURATION =================
-BC_MODEL_PATH = "./file/model/bc_256.zip"
+# BC_MODEL_PATH = "./file/model/bc_256.zip"
+BC_MODEL_PATH = None
 BC_STATS_PATH = None
 
 # === EXPERIMENTS CONFIG ===
-ALGORITHMS_TO_TEST = ["PPO_Warmstart", "LeakyPPO_Warmstart"]     # ["PPO", "LeakyPPO", "PPO_Warmstart", "LeakyPPO_Warmstart"]
-SEEDS = [0, 5, 10, 15, 20]  # 5 seeds for statistical significance (per algorithm)
+ALGORITHMS_TO_TEST = ["LeakyPPO"]     # ["PPO", "LeakyPPO", "PPO_Warmstart", "LeakyPPO_Warmstart"]
+SEEDS = [0, 5]  # 5 seeds for statistical significance (per algorithm)
 TIMESTEPS  = 15_000_000
 EVAL_EPISODES = 100 # RLiable recommends at least 100 episodes for evaluation
 
