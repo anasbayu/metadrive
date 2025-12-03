@@ -56,10 +56,11 @@ def load_optuna_params(algo_name):
 
 
 # ============== CONFIGURATIONS =============
-NUM_ENV = 5
+NUM_ENV = 10
 TIMESTEPS = 15_000_000
 PATH_LOG_DIR = "./logs/retune/"
 PATH_SAVED_MODEL_ROOT = "./models/retune/"
+TRAFFIC_DENSITY = 0.3
 
 TRAIN_CONFIG = {
     "num_scenarios": 100,
@@ -67,11 +68,11 @@ TRAIN_CONFIG = {
     "use_render": False,
     "manual_control": False,
     "log_level": 50,
-    "traffic_density": 0.0,
-    "out_of_road_penalty": 10.0,
-    "crash_vehicle_penalty": 10.0,
-    "crash_object_penalty": 10.0,
-    "success_reward": 30.0,
+    "traffic_density": TRAFFIC_DENSITY,
+    "out_of_road_penalty": 30.0,
+    "crash_vehicle_penalty": 30.0,
+    "crash_object_penalty": 30.0,
+    "success_reward": 100.0,
     "use_lateral_reward": True
 }
 
@@ -81,7 +82,7 @@ EVAL_CONFIG = {
     "use_render": False,
     "manual_control": False,
     "log_level": 50,
-    "traffic_density": 0.0
+    "traffic_density": TRAFFIC_DENSITY,
 }
 
 # ============== CALLBACKS =============
@@ -182,18 +183,17 @@ def train(
         partial(create_env, TRAIN_CONFIG, run_log_dir, seed=experiment_seed + i) 
         for i in range(NUM_ENV)
     ])
+    train_env = VecNormalize(train_env, norm_obs=True, norm_reward=True, clip_obs=10.)
 
     # 2. Warmstart: Apply Normalization
     if bc_stats_path and os.path.exists(bc_stats_path):
         print(f"  [Warmstart] Loading VecNormalize stats from {bc_stats_path}")
-        train_env = VecNormalize(train_env, norm_obs=True, norm_reward=True, clip_obs=10.)
+        # train_env = VecNormalize(train_env, norm_obs=True, norm_reward=True, clip_obs=10.)
         stats = np.load(bc_stats_path)
         train_env.obs_rms.mean = stats["mean"]
         train_env.obs_rms.var = stats["std"] ** 2
-        train_env.training = True 
     else:
-        # Optional: You can enable VecNormalize even for non-warmstart if desired
-        pass
+        print("  [Fresh Train] Initializing empty VecNormalize stats.")
     
     logger = configure(run_log_dir, ["stdout", "csv", "json", "tensorboard"])
     
@@ -245,14 +245,13 @@ def train(
         print(f"  [Warmstart] Loading Imitation/SB3 policy from {bc_model_path}...")
         
         try:
-            # === FIX START: Handle PyTorch 2.6+ Security Change ===
+            # === Handle PyTorch 2.6+ Security Change ===
             import functools
             
             # Create a custom loader that forces weights_only=False
-            # This is safe because YOU created the BC model file.
             custom_load = functools.partial(torch.load, weights_only=False)
 
-            # We temporarily swap torch.load with our custom version
+            # Temporarily swap torch.load with our custom version
             original_load = torch.load
             torch.load = custom_load
             
@@ -262,7 +261,7 @@ def train(
             finally:
                 # Restore the original torch.load immediately after
                 torch.load = original_load
-            # === FIX END ===
+            # =================
 
             # Extract the state dictionary
             bc_weights = bc_policy.state_dict()
