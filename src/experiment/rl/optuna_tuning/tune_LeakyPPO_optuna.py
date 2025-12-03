@@ -26,10 +26,10 @@ N_TRIALS = 100           # Total number of trials to run
 N_STARTUP_TRIALS = 5     # Number of trials before pruning starts
 N_EVALUATIONS = 15       # Evaluate 15 times during training (to decide pruning)
 TIMESTEPS_PER_TRIAL = 1_500_000  # 1.5M steps per trial
-NUM_ENV = 5
+NUM_ENV = 10
 EVAL_EPISODES = 5       # Episodes per evaluation
-STUDY_NAME = "leaky_ppo_metadrive_optuna_1.5M"
-STORAGE_URL = "sqlite:///optuna_leaky_ppo_1.5M.db"
+STUDY_NAME = "leaky_ppo_optuna_1.5M_new"
+STORAGE_URL = "sqlite:///optuna_leaky_ppo_1.5M_new.db"
 TRAFFIC_DENSITY = 0.3    # Traffic density in MetaDrive (Must match between training and evaluation)
 # =========================
 
@@ -41,11 +41,11 @@ TRAIN_CONFIG = {
     "manual_control": False,
     "log_level": 50,
     "traffic_density": TRAFFIC_DENSITY,
-    "out_of_road_penalty": 10.0,
-    "crash_vehicle_penalty": 10.0,
-    "crash_object_penalty": 10.0,
-    "success_reward": 30.0,
-    "use_lateral_reward": True
+    "out_of_road_penalty": 30.0,
+    "crash_vehicle_penalty": 30.0,
+    "crash_object_penalty": 30.0,
+    "success_reward": 100.0,
+    "use_lateral_reward": True              # Keeps it centered
 }
 
 # Evaluation config (simpler for faster tuning)
@@ -139,14 +139,14 @@ def objective(trial: optuna.Trial) -> float:
     # ========================================
     # SAMPLE HYPERPARAMETERS
     # ========================================
-    learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
-    ent_coef = trial.suggest_float("ent_coef", 0.001, 0.1, log=True)
-    batch_size = trial.suggest_categorical("batch_size", [64, 128, 256, 512])
+    learning_rate = trial.suggest_float("learning_rate", 1e-5, 5e-4, log=True)
+    ent_coef = trial.suggest_float("ent_coef", 0.00001, 0.01, log=True)
+    batch_size = trial.suggest_categorical("batch_size", [128, 256, 512])
     n_steps = trial.suggest_categorical("n_steps", [2048, 4096, 8192])
-    gamma = trial.suggest_float("gamma", 0.95, 0.9999)
+    gamma = trial.suggest_categorical("gamma", [0.98, 0.99, 0.995, 0.999])
     clip_range = trial.suggest_float("clip_range", 0.1, 0.3)
-    n_epochs = trial.suggest_int("n_epochs", 3, 10)
-    target_kl = trial.suggest_float("target_kl", 0.01, 0.1)
+    n_epochs = trial.suggest_int("n_epochs", 5, 10)
+    target_kl = trial.suggest_float("target_kl", 0.01, 0.05)
     # --- NETWORK ARCHITECTURE ---
     net_arch_type = trial.suggest_categorical("net_arch", ["wide", "medium", "deep"])
     net_arch_map = {
@@ -173,6 +173,7 @@ def objective(trial: optuna.Trial) -> float:
     print(f"  clip_range:     {clip_range:.2f}")
     print(f"  n_epochs:       {n_epochs}")
     print(f"  target_kl:      {target_kl:.4f}")
+    print(f"  net_arch:       {net_arch_type} -> {selected_arch}")
     print(f"  alpha:          {alpha:.4f}")
     print(f"{'='*60}\n")
     

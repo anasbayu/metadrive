@@ -13,6 +13,7 @@ import numpy as np
 import gymnasium as gym
 import os
 import json
+import gc
 
 # --- FOR PyTorch 2.6+ ---
 safe_globals = [gym.spaces.box.Box, np.float32, np.int64, np.uint8, np.bool_, np.dtype]
@@ -20,14 +21,15 @@ torch.serialization.add_safe_globals(safe_globals)
 # ---------------------------
 
 # === CONFIG FOR TUNING ===
-N_TRIALS = 50           # Increase for better optimization
-N_STARTUP_TRIALS = 10   # More startup trials before pruning
-N_EVALUATIONS = 3       # Evaluate 3 times during training
+N_TRIALS = 100           # Total number of trials to run
+N_STARTUP_TRIALS = 5     # Number of trials before pruning starts
+N_EVALUATIONS = 15       # Evaluate 15 times during training (to decide pruning)
 TIMESTEPS_PER_TRIAL = 1_500_000  # 1.5M steps per trial
-NUM_ENV = 5
+NUM_ENV = 10
 EVAL_EPISODES = 5       # Episodes per evaluation
-STUDY_NAME = "ppo_metadrive_optuna_1.5M"
-STORAGE_URL = "sqlite:///optuna_ppo_1.5M.db"
+STUDY_NAME = "ppo_optuna_1.5M_new"
+STORAGE_URL = "sqlite:///optuna_ppo_1.5M_new.db"
+TRAFFIC_DENSITY = 0.3    # Traffic density in MetaDrive (Must match between training and evaluation)
 # =========================
 
 # Training config (match your main script)
@@ -37,12 +39,12 @@ TRAIN_CONFIG = {
     "use_render": False,
     "manual_control": False,
     "log_level": 50,
-    "traffic_density": 0.0,
-    "out_of_road_penalty": 10.0,
-    "crash_vehicle_penalty": 10.0,
-    "crash_object_penalty": 10.0,
-    "success_reward": 30.0,
-    "use_lateral_reward": True
+    "traffic_density": TRAFFIC_DENSITY,
+    "out_of_road_penalty": 30.0,
+    "crash_vehicle_penalty": 30.0,
+    "crash_object_penalty": 30.0,
+    "success_reward": 100.0,
+    "use_lateral_reward": True              # Keeps it centered
 }
 
 # Evaluation config (simpler for faster tuning)
@@ -52,13 +54,16 @@ EVAL_CONFIG = {
     "use_render": False,
     "manual_control": False,
     "log_level": 50,
-    "traffic_density": 0.0,
+    "traffic_density": TRAFFIC_DENSITY,
 }
 
 
 def create_env(config, seed=0):
     """Create and seed MetaDrive environment."""
-    env = MetaDriveEnv(config)
+    env_config = config.copy()
+    env_config["start_seed"] = seed     # Force the MetaDrive internal seed to be unique per process
+
+    env = MetaDriveEnv(env_config)
     env = Monitor(env)
     env.action_space.seed(seed)
     set_random_seed(seed)
@@ -131,19 +136,26 @@ def objective(trial: optuna.Trial) -> float:
     """
     
     # ========================================
-    # 1. SAMPLE HYPERPARAMETERS
+    # SAMPLE HYPERPARAMETERS
     # ========================================
-    learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
-    ent_coef = trial.suggest_float("ent_coef", 0.001, 0.1, log=True)
-    batch_size = trial.suggest_categorical("batch_size", [64, 128, 256, 512])
+    learning_rate = trial.suggest_float("learning_rate", 1e-5, 5e-4, log=True)
+    ent_coef = trial.suggest_float("ent_coef", 0.00001, 0.01, log=True)
+    batch_size = trial.suggest_categorical("batch_size", [128, 256, 512])
     n_steps = trial.suggest_categorical("n_steps", [2048, 4096, 8192])
-    gamma = trial.suggest_float("gamma", 0.95, 0.9999)
-    gae_lambda = trial.suggest_float("gae_lambda", 0.8, 0.99)
+    gamma = trial.suggest_categorical("gamma", [0.98, 0.99, 0.995, 0.999])
     clip_range = trial.suggest_float("clip_range", 0.1, 0.3)
-    n_epochs = trial.suggest_int("n_epochs", 3, 10)
-    max_grad_norm = trial.suggest_float("max_grad_norm", 0.3, 1.0)
+    n_epochs = trial.suggest_int("n_epochs", 5, 10)
+    target_kl = trial.suggest_float("target_kl", 0.01, 0.05)
+    # --- NETWORK ARCHITECTURE ---
+    net_arch_type = trial.suggest_categorical("net_arch", ["wide", "medium", "deep"])
+    net_arch_map = {
+        "wide":  dict(pi=[400, 300], vf=[400, 300]),        # Wide architecture from DDPG
+        "medium": dict(pi=[256, 256], vf=[256, 256]),
+        "deep":   dict(pi=[256, 256, 256], vf=[256, 256, 256])
+    }
+    selected_arch = net_arch_map[net_arch_type]
+    # ----------------------------
     
-    # Use a unique seed per trial for reproducibility
     trial_seed = trial.number
     
     print(f"\n{'='*60}")
@@ -154,14 +166,16 @@ def objective(trial: optuna.Trial) -> float:
     print(f"  batch_size:     {batch_size}")
     print(f"  n_steps:        {n_steps}")
     print(f"  gamma:          {gamma:.4f}")
-    print(f"  gae_lambda:     {gae_lambda:.4f}")
+    print(f"  gae_lambda:     {0.95:.4f}")
+    print(f"  max_grad_norm:  {0.5:.2f}")
     print(f"  clip_range:     {clip_range:.2f}")
     print(f"  n_epochs:       {n_epochs}")
-    print(f"  max_grad_norm:  {max_grad_norm:.2f}")
+    print(f"  target_kl:      {target_kl:.4f}")
+    print(f"  net_arch:       {net_arch_type} -> {selected_arch}")
     print(f"{'='*60}\n")
     
     # ========================================
-    # 2. CREATE ENVIRONMENTS
+    # CREATE ENVIRONMENTS
     # ========================================
     try:
         # Training environments (vectorized)
@@ -178,11 +192,10 @@ def objective(trial: optuna.Trial) -> float:
         return -1000.0
     
     # ========================================
-    # 3. CREATE PPO MODEL
+    # CREATE PPO MODEL
     # ========================================
-    # Use same network architecture as final training
     policy_kwargs = dict(
-        net_arch=dict(pi=[256, 256], vf=[256, 256])
+        net_arch=selected_arch,
     )
     
     try:
@@ -194,10 +207,11 @@ def objective(trial: optuna.Trial) -> float:
             batch_size=batch_size,
             n_steps=n_steps,
             gamma=gamma,
-            gae_lambda=gae_lambda,
+            gae_lambda=0.95,        # Fixed to 0.95 as per industry standard
+            max_grad_norm=0.5,      # Fixed to 0.5 as per industry standard
             clip_range=clip_range,
             n_epochs=n_epochs,
-            max_grad_norm=max_grad_norm,
+            target_kl=target_kl,
             policy_kwargs=policy_kwargs,
             verbose=0,
             seed=trial_seed
@@ -209,9 +223,9 @@ def objective(trial: optuna.Trial) -> float:
         return -1000.0
     
     # ========================================
-    # 4. CREATE EVALUATION CALLBACK
+    # CREATE EVALUATION CALLBACK
     # ========================================
-    eval_freq = max(TIMESTEPS_PER_TRIAL // N_EVALUATIONS // NUM_ENV, 1)
+    eval_freq = max(TIMESTEPS_PER_TRIAL // N_EVALUATIONS // NUM_ENV, 1000)
     
     eval_callback = TrialEvalCallback(
         eval_env=eval_env,
@@ -223,7 +237,7 @@ def objective(trial: optuna.Trial) -> float:
     )
     
     # ========================================
-    # 5. TRAIN MODEL
+    # TRAIN MODEL
     # ========================================
     try:
         model.learn(
@@ -270,11 +284,21 @@ def objective(trial: optuna.Trial) -> float:
         eval_env.close()
         return -1000.0
     
+    finally:
+        if train_env is not None:
+            train_env.close()
+        if eval_env is not None:
+            eval_env.close()
+        
+        gc.collect()
+    
     # ========================================
-    # 6. CLEANUP
+    # CLEANUP
     # ========================================
-    train_env.close()
-    eval_env.close()
+    if train_env is not None:
+        train_env.close()
+    if eval_env is not None:
+        eval_env.close()
     
     return mean_reward
 
@@ -283,7 +307,7 @@ def run_optimization():
     """Run Optuna optimization study."""
     
     print(f"\n{'='*70}")
-    print(f"  STARTING PPO HYPERPARAMETER OPTIMIZATION")
+    print(f"  STARTING HYPERPARAMETER OPTIMIZATION")
     print(f"{'='*70}")
     print(f"Study Name:     {STUDY_NAME}")
     print(f"Storage:        {STORAGE_URL}")
@@ -368,7 +392,7 @@ def run_optimization():
 
 def main():
     study = run_optimization()
-    
+
     print("\nTop 5 Trials:")
     print(f"{'Trial':<8} {'Reward':<12} {'State':<12}")
     print("-" * 32)
@@ -381,6 +405,31 @@ def main():
     
     for trial in sorted_trials:
         print(f"{trial.number:<8} {trial.value:<12.2f} {trial.state.name:<12}")
+    
+    return study
 
 if __name__ == "__main__":
-    main()
+    study = main()
+
+    # ==== VISUALIZATION ====
+    print("\nGenerating analysis plots...")
+    try:
+        from optuna.visualization import plot_optimization_history, plot_param_importances
+        
+        # Plot 1: Optimization History
+        # Shows if the agent is actually getting better over the trials.
+        fig1 = plot_optimization_history(study)
+        fig1.write_image("ppo_optuna_history.png")
+        print(" -> Saved 'ppo_optuna_history.png'")
+        
+        # Plot 2: Hyperparameter Importance
+        # Shows which parameter mattered the most (e.g., "Learning Rate was 50% of the reason we succeeded").
+        fig2 = plot_param_importances(study)
+        fig2.write_image("ppo_optuna_importance.png")
+        print(" -> Saved 'ppo_optuna_importance.png'")
+        
+    except ImportError:
+        print("\n⚠️  Could not generate plots. Missing dependencies.")
+        print("   Run: pip install plotly kaleido pandas")
+    except Exception as e:
+        print(f"\n⚠️  Plotting failed: {e}")
