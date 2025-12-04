@@ -1,0 +1,19 @@
+{
+    "best_trial": 0,
+    "best_value": 117.92478391403729,
+    "best_params": {
+        "learning_rate": 4.3284502212938785e-05,
+        "ent_coef": 0.0071144760093434225,
+        "batch_size": 128,
+        "n_steps": 8192,
+        "gamma": 0.999,
+        "clip_range": 0.26648852816008434,
+        "n_epochs": 6,
+        "target_kl": 0.017272998688284025,
+        "net_arch": "deep",
+        "alpha": 0.092069553542002
+    },
+    "n_trials": 39,
+    "n_pruned": 7,
+    "n_failed": 3
+}

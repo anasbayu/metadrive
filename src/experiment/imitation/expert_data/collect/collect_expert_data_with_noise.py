@@ -4,12 +4,15 @@ import gymnasium as gym
 from metadrive.envs.metadrive_env import MetaDriveEnv
 from metadrive.policy.idm_policy import IDMPolicy
 from stable_baselines3.common.buffers import ReplayBuffer
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 # ============== CONFIGURATIONS =============
 NUM_EPISODES_TO_RECORD = 1200
-DATA_SAVE_PATH = "./file/expert_data/"
+DATA_SAVE_PATH = "./file/expert_data/new_success_only/"
 BUFFER_SIZE = 500_000 
-EXPORT_NAME = "expert_metadrive_500k_1200eps_with_recovery_v3" 
+EXPORT_NAME = "expert_metadrive_500k_1200eps_normalized" 
+STATS_NAME = "expert_metadrive_500k_1200eps_normalized_stats.pkl"
+TRAFFIC_DENSITY = 0.3
 
 # NOISE SETTINGS (For recovery learning)
 NOISE_PROBABILITY = 0.15 
@@ -18,15 +21,19 @@ STEERING_NOISE_STD = 0.3
 COLLECT_CONFIG = {
     "use_render": False,
     "manual_control": False,
-    "num_scenarios": 100,
-    "start_seed": np.random.randint(0, 10000),
-    "traffic_density": 0.15,
-    "out_of_road_penalty": 10.0,
-    "crash_vehicle_penalty": 10.0,
-    "success_reward": 30.0,
+    "start_seed": 0,
+    "num_scenarios": 1000,
+    "traffic_density": TRAFFIC_DENSITY,
+    "out_of_road_penalty": 30.0,
+    "crash_vehicle_penalty": 30.0,
+    "crash_object_penalty": 30.0,
+    "success_reward": 100.0,
     "use_lateral_reward": True,
     "window_size": (100, 100),
 }
+
+def make_env():
+    return MetaDriveEnv(COLLECT_CONFIG)
 
 def get_expert_action(policy):
     """
@@ -69,7 +76,12 @@ def get_expert_action(policy):
 
 def collect_data():
     os.makedirs(DATA_SAVE_PATH, exist_ok=True)
-    env = MetaDriveEnv(COLLECT_CONFIG)
+
+    env = DummyVecEnv([make_env])
+    env = VecNormalize(env, norm_obs=True, norm_reward=False, clip_obs=10.)
+    inner_env = env.envs[0]
+
+    # env = MetaDriveEnv(COLLECT_CONFIG)
     
     replay_buffer = ReplayBuffer(
         BUFFER_SIZE,
@@ -92,18 +104,20 @@ def collect_data():
             if (episode + 1) % 10 == 0:
                 print(f"Episode {episode + 1}/{NUM_EPISODES_TO_RECORD} | Steps: {total_steps:,}")
             
-            obs, info = env.reset()
-            expert_policy = IDMPolicy(control_object=env.agent, random_seed=COLLECT_CONFIG['start_seed'])
+            # Vary the seed per episode
+            episode_seed = episode % COLLECT_CONFIG["num_scenarios"]
+            obs = env.reset()
             
-            # Reset expert internal state
+            # Create fresh expert policy for this episode's agent
+            expert_policy = IDMPolicy(control_object=inner_env.agent, random_seed=episode_seed)
             expert_policy.reset()
             
-            terminated = False
-            truncated = False
+            done = False
             episode_reward = 0
-            
-            while not terminated and not truncated:
-                # 1. ROBUSTLY GET EXPERT ACTION
+            episode_buffer = []
+
+            while not done:
+                # 1. GET EXPERT ACTION
                 expert_action = get_expert_action(expert_policy)
                 
                 # 2. NOISE INJECTION (For Recovery)
@@ -113,30 +127,57 @@ def collect_data():
                     action_to_execute[0] = np.clip(action_to_execute[0] + noise, -1.0, 1.0)
 
                 # 3. STEP
-                next_obs, reward, terminated, truncated, info = env.step(action_to_execute)
+                # next_obs, reward, terminated, truncated, info = env.step(action_to_execute)
+                next_obs, reward, dones, infos = env.step([action_to_execute])                
                 
-                # 4. SAVE
-                replay_buffer.add(
-                    obs,
-                    next_obs,
-                    expert_action, # Save CLEAN action
-                    reward,
-                    terminated or truncated,
-                    [info]
-                )
+                # Extract scalars
+                done = dones[0]
+                info = infos[0]
+
+                # Store in temporary buffer instead of main buffer
+                episode_buffer.append({
+                    "obs": obs.copy(),
+                    "next_obs": next_obs.copy(),
+                    "action": expert_action.copy(),
+                    "reward": reward,
+                    "done": done,
+                    "info": info
+                })
 
                 obs = next_obs
-                episode_reward += reward
-                total_steps += 1
-                
-                if total_steps >= BUFFER_SIZE:
-                    break 
+                episode_reward += reward 
+            # ==== END OF EPISODE ====
+
+            if info.get("arrive_dest", False):
+                # Success! Save all transitions from this episode
+                for trans in episode_buffer:
+                    replay_buffer.add(
+                        trans["obs"],
+                        trans["next_obs"],
+                        trans["action"],
+                        trans["reward"],
+                        trans["done"],
+                        [trans["info"]]
+                    )
+                    total_steps += 1
+                episodes_collected += 1
+                print(f"✓ Saved episode {episode} (Success)")
+            else:
+                # Failure - discarding episode
+                print(f"✗ Discarded episode {episode} (Crash/Timeout)")
 
             total_reward += episode_reward
-            episodes_collected += 1
-            if total_steps >= BUFFER_SIZE: break
+            
+            if total_steps >= BUFFER_SIZE:
+                print(f"Buffer full! Reached {total_steps:,} transitions.")
+                break
 
     finally:
+        # SAVE THE VECNORMALIZE STATS
+        stats_path = os.path.join(DATA_SAVE_PATH, STATS_NAME)
+        env.save(stats_path)
+        print(f"\n✅ Saved VecNormalize statistics to: {stats_path}")
+
         env.close()
     
     # Save
@@ -152,6 +193,23 @@ def collect_data():
     print(f"Saving to {save_file}.npz ...")
     np.savez_compressed(save_file, **data)
     print("Done!")
+
+    print(f"\n{'='*60}")
+    print("DATA VERIFICATION")
+    print(f"{'='*60}")
+    print(f"Total transitions: {total_steps:,}")
+    print(f"Episodes collected: {episodes_collected}")
+    print(f"\nObservation Statistics:")
+    print(f"  Mean: {data['observations'].mean():.4f} (should be ~0 if normalized)")
+    print(f"  Std:  {data['observations'].std():.4f} (should be ~1 if normalized)")
+    print(f"  Min:  {data['observations'].min():.4f}")
+    print(f"  Max:  {data['observations'].max():.4f}")
+    print(f"\nAction Statistics:")
+    print(f"  Mean: {data['actions'].mean(axis=0)} (steering, throttle)")
+    print(f"  Std:  {data['actions'].std(axis=0)}")
+    print(f"  Min:  {data['actions'].min(axis=0)}")
+    print(f"  Max:  {data['actions'].max(axis=0)}")
+    print(f"{'='*60}\n")
 
 if __name__ == "__main__":
     collect_data()

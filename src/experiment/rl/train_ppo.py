@@ -58,8 +58,8 @@ def load_optuna_params(algo_name):
 # ============== CONFIGURATIONS =============
 NUM_ENV = 10
 TIMESTEPS = 15_000_000
-PATH_LOG_DIR = "./logs/retune/"
-PATH_SAVED_MODEL_ROOT = "./models/retune/"
+PATH_LOG_DIR = "./logs/retune2/"
+PATH_SAVED_MODEL_ROOT = "./models/retune2/"
 TRAFFIC_DENSITY = 0.3
 
 TRAIN_CONFIG = {
@@ -183,23 +183,40 @@ def train(
         partial(create_env, TRAIN_CONFIG, run_log_dir, seed=experiment_seed + i) 
         for i in range(NUM_ENV)
     ])
-    train_env = VecNormalize(train_env, norm_obs=True, norm_reward=True, clip_obs=10.)
 
-    # 2. Warmstart: Apply Normalization
+    # Warmstart: Apply Normalization
     if bc_stats_path and os.path.exists(bc_stats_path):
         print(f"  [Warmstart] Loading VecNormalize stats from {bc_stats_path}")
-        # train_env = VecNormalize(train_env, norm_obs=True, norm_reward=True, clip_obs=10.)
-        stats = np.load(bc_stats_path)
-        train_env.obs_rms.mean = stats["mean"]
-        train_env.obs_rms.var = stats["std"] ** 2
+
+        train_env = VecNormalize.load(bc_stats_path, train_env)
+        train_env.training = True
     else:
         print("  [Fresh Train] Initializing empty VecNormalize stats.")
+        train_env = VecNormalize(train_env, norm_obs=True, norm_reward=True, clip_obs=10.)
     
     logger = configure(run_log_dir, ["stdout", "csv", "json", "tensorboard"])
     
+
+    # ========== ARCHITECTURE SELECTION ==========
+    net_arch_map = {
+        "wide":   dict(pi=[400, 300], vf=[400, 300]),
+        "medium": dict(pi=[256, 256], vf=[256, 256]),
+        "deep":   dict(pi=[256, 256, 256], vf=[256, 256, 256])
+    }
+
+    arch_key = optuna_params.pop("net_arch", "medium")
+    
+    if arch_key in net_arch_map:
+        selected_arch = net_arch_map[arch_key]
+        print(f"  [Network] Using Optuna-selected architecture: {arch_key} -> {selected_arch}")
+    else:
+        print(f"  [Network] Warning: Unknown arch '{arch_key}', defaulting to Medium.")
+        selected_arch = net_arch_map["medium"]
+    
     policy_kwargs = dict(
-        net_arch=dict(pi=[256, 256], vf=[256, 256])
+        net_arch=selected_arch
     )
+    # ========= END OF ARCHITECTURE SELECTION ==========
 
     # Callbacks
     checkpoint_callback = CheckpointCallback(
@@ -240,7 +257,7 @@ def train(
     model.set_logger(logger)
     
 
-    # 4. Warmstart: Brain Transplant (Imitation Library Compatible)
+    # Warmstart: Brain Transplant (Imitation Library Compatible)
     if bc_model_path and os.path.exists(bc_model_path):
         print(f"  [Warmstart] Loading Imitation/SB3 policy from {bc_model_path}...")
         
@@ -269,7 +286,19 @@ def train(
             # Load these weights into your new PPO model
             model.policy.load_state_dict(bc_weights, strict=False)
             
-            print("  [Warmstart] Weights transplanted successfully!")
+
+            # VERIFY what actually transferred
+            bc_params = sum(p.numel() for p in bc_policy.parameters())
+            rl_params = sum(p.numel() for p in model.policy.parameters())
+            
+            if bc_params != rl_params:
+                raise ValueError(
+                    f"Architecture mismatch! BC has {bc_params:,} params "
+                    f"but RL has {rl_params:,} params. Cannot warmstart!"
+                )
+            else:
+                print(f"  ✓ Architecture match confirmed ({bc_params:,} parameters)")
+                print("  [Warmstart] Weights transplanted successfully!")
 
         except Exception as e:
             print(f"  [Warmstart] CRITICAL ERROR loading BC weights: {e}")

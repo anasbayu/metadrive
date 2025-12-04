@@ -1,3 +1,5 @@
+import os
+import json
 import numpy as np
 import torch
 import gymnasium as gym
@@ -8,17 +10,47 @@ import imitation.algorithms.bc as bc
 from imitation.data.types import Transitions
 from sklearn.model_selection import train_test_split
 import functools
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 # ================= CONFIGURATION =================
 EXPERT_DATA_PATH = "./file/expert_data/expert_metadrive_500k_noisy_v5.npz"
 MODEL_SAVE_PATH = "./file/model/bc_256.zip"
+STATS_PATH = "./file/expert_data/expert_metadrive_500k_1200eps_normalized_stats.pkl"
 BEST_POLICY_PATH = "./file/model/bc_256_policy_best.zip"
-TRAFFIC_DENSITY = 0.15  # Must match collection density
+TRAFFIC_DENSITY = 0.3  # Must match collection density
 SEED = 42
 BATCH_SIZE = 64
 EPOCHS = 100
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+ALGO_NAME = "PPO"  # or "LeakyPPO"
 # =================================================
+
+def load_rl_architecture(algo_name="PPO"):
+    """Load the same architecture that RL will use."""
+    if "LeakyPPO" in algo_name:
+        filename = "leaky_ppo_metadrive_optuna_1.5M_best_params.json"
+    else:
+        filename = "ppo_metadrive_optuna_1.5M_best_params.json"
+    
+    if not os.path.exists(filename):
+        print(f"Warning: {filename} not found, defaulting to medium")
+        return [256, 256]
+    
+    with open(filename, "r") as f:
+        params = json.load(f)
+    
+    # Map architecture strings to actual configs
+    arch_map = {
+        "wide":   [400, 300],
+        "medium": [256, 256],
+        "deep":   [256, 256, 256]
+    }
+    
+    arch_key = params.get("net_arch", "medium")
+    architecture = arch_map.get(arch_key, [256, 256])
+    
+    print(f"Using RL-matched architecture: {arch_key} -> {architecture}")
+    return architecture
 
 def load_expert_transitions(path):
     """
@@ -100,6 +132,9 @@ def train():
     )
     # ==== END DATA SPLIT ====
     
+    # Load matching architecture
+    net_arch = load_rl_architecture(ALGO_NAME)  # or "LeakyPPO" depending on what you're warmstarting
+
     # Initialize BC Trainer
     # We use a standard FeedForward policy (MlpPolicy)
     rng = np.random.default_rng(SEED)
@@ -116,7 +151,7 @@ def train():
             observation_space=env.observation_space,
             action_space=env.action_space,
             lr_schedule=lambda _: 1e-4,
-            net_arch=[256, 256] # Network architecture (DDPG use this size)
+            net_arch=net_arch,
         )
     )
     
@@ -198,13 +233,38 @@ def train():
     
     # 5. Evaluate
     print("Evaluating Policy in environment...")
-    mean_reward, std_reward = evaluate_policy(bc_trainer.policy, env, n_eval_episodes=10, render=False)
-    print(f"Mean Reward: {mean_reward:.2f} +/- {std_reward:.2f}")
+
+    # Create evaluation environment with VecNormalize
+    eval_env = DummyVecEnv([lambda: MetaDriveEnv(env_config)])
+
+    # Load the normalization stats from data collection
+    stats_path = STATS_PATH
+    if os.path.exists(stats_path):
+        eval_env = VecNormalize.load(stats_path, eval_env)
+        eval_env.training = False  # Don't update stats during eval
+        eval_env.norm_reward = False  # Return raw rewards
+        print(f"  Loaded VecNormalize stats from {stats_path}")
+    else:
+        print(f"  WARNING: Stats file not found at {stats_path}")
+        print(f"  Evaluation results will be incorrect!")
     
+    mean_reward, std_reward = evaluate_policy(bc_trainer.policy, eval_env, n_eval_episodes=10)
+    print(f"Mean Reward: {mean_reward:.2f} +/- {std_reward:.2f}")
+        
     # 6. Save the trained policy
     bc_trainer.policy.save(MODEL_SAVE_PATH)
     print(f"Policy saved to {MODEL_SAVE_PATH}")
 
+    print(f"\n{'='*60}")
+    print("BC POLICY VERIFICATION")
+    print(f"{'='*60}")
+    param_count = sum(p.numel() for p in bc_trainer.policy.parameters())
+    print(f"Total parameters: {param_count:,}")
+    print(f"Architecture: {net_arch}")
+    print(f"This must match RL training architecture!")
+    print(f"{'='*60}\n")
+
+    eval_env.close()
     env.close()
 
 if __name__ == "__main__":

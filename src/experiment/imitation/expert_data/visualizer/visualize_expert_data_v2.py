@@ -4,15 +4,33 @@ import seaborn as sns
 import os
 
 # ================= CONFIGURATION =================
-DATA_PATH = "./file/expert_data/expert_metadrive_500k_noisy_v5.npz" 
+DATA_PATH = "./file/expert_data/new_success_only/expert_metadrive_500k_1200eps_normalized.npz" 
 # =================================================
 
 def visualize_expert_data(path):
     print(f"Loading data from {path}...")
     try:
         data = np.load(path)
+
         actions = data['actions']
+        print(f"Actions shape: {actions.shape}")
+        # Squeeze out the n_envs dimension if present
+        if actions.ndim == 3:  # Shape is (steps, n_envs, action_dim)
+            actions = actions[:, 0, :]  # Take first env, shape becomes (steps, action_dim)
+        elif actions.ndim == 2 and actions.shape[1] == 1:  # Shape is (steps, 1)
+            # This means actions were flattened incorrectly
+            raise ValueError(f"Actions have wrong shape: {actions.shape}. Expected (n, 2) but got (n, 1)")
+        
+        print(f"Actions shape after processing: {actions.shape}")
+
+        if np.any(actions < -1.0) or np.any(actions > 1.0):
+            print("⚠️  WARNING: Actions outside [-1, 1] range!")
+            print(f"   Min: {actions.min()}, Max: {actions.max()}")
+
         rewards = data['rewards']
+        if rewards.ndim == 2:
+            rewards = rewards.flatten()  # Convert (n, 1) to (n,)
+        
         dones = data['dones']
     except FileNotFoundError:
         print("❌ File not found! Please check the path.")
@@ -44,6 +62,31 @@ def visualize_expert_data(path):
         episode_returns.append(ep_return)
         
         current_idx = end_idx + 1
+
+    # ================= STATISTICS =================
+    observations = data['observations']
+
+    print("\n" + "="*60)
+    print("DATA STATISTICS")
+    print("="*60)
+    print(f"Observations - Mean: {observations.mean():.4f} (should be ~0)")
+    print(f"Observations - Std:  {observations.std():.4f} (should be ~1)")
+    print(f"Actions - Mean:      {actions.mean(axis=0)} (steering, throttle)")
+    print(f"Rewards - Mean:      {rewards.mean():.4f}")
+    print(f"Episodes:            {len(episode_lengths)}")
+    print(f"Avg Episode Length:  {np.mean(episode_lengths):.1f}")
+    print(f"Avg Episode Return:  {np.mean(episode_returns):.1f}")
+    print("="*60 + "\n")
+    # ================ END OF STATISTICS =================
+
+    print(f"\n📊 Episode Analysis:")
+    print(f"  Total Episodes: {len(episode_lengths)}")
+    print(f"  Shortest: {np.min(episode_lengths)} steps")
+    print(f"  Longest:  {np.max(episode_lengths)} steps")
+    print(f"  Mean:     {np.mean(episode_lengths):.1f} steps")
+    print(f"  Best Return:  {np.max(episode_returns):.2f}")
+    print(f"  Worst Return: {np.min(episode_returns):.2f}")
+
 
     # ================= PLOTTING =================
     plt.figure(figsize=(18, 10))
@@ -82,7 +125,21 @@ def visualize_expert_data(path):
     plt.title("Total Reward per Episode")
     plt.xlabel("Cumulative Reward")
 
+    # Plot 6: Sample Trajectory (Actions over Time)
+    plt.subplot(2, 3, 6)
+    sample_length = min(500, len(steering))  # First 500 steps
+    plt.plot(steering[:sample_length], label='Steering', alpha=0.7)
+    plt.plot(throttle_brake[:sample_length], label='Throttle', alpha=0.7)
+    plt.axhline(0, color='black', linestyle='--', linewidth=0.5)
+    plt.title("Sample Trajectory (First 500 steps)")
+    plt.xlabel("Time Step")
+    plt.ylabel("Action Value")
+    plt.legend()
+    plt.ylim(-1.1, 1.1)
+    plt.grid(True, alpha=0.3)
+
     plt.tight_layout()
+    # ================ END OF PLOTTING =================
 
     # ================= SAVING =================
     # Create a filename based on the input .npz name
