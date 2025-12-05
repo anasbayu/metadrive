@@ -4,7 +4,7 @@ import seaborn as sns
 import os
 
 # ================= CONFIGURATION =================
-DATA_PATH = "./file/expert_data/new_success_only/expert_metadrive_500k_1200eps_normalized.npz" 
+DATA_PATH = "./file/expert_data/new_success_only/expert_metadrive_500k_5000eps_normalized.npz" 
 # =================================================
 
 def visualize_expert_data(path):

@@ -3,6 +3,7 @@ import multiprocessing as mp
 import sys
 
 from src.experiment.rl.run_experiments import run_all_experiments
+from src.experiment.rl.run_experiments_parallel import run_all_experiments_parallel
 import src.experiment.rl.optuna_tuning.tune_LeakyPPO_optuna as tune_leakyPPO
 import src.experiment.rl.optuna_tuning.tune_PPO_optuna as tune_ppo
 
@@ -17,6 +18,12 @@ def main():
         help="Run the full training and evaluation experiments (PPO/LeakyPPO seeds)."
     )
     
+    group.add_argument(
+        "--run-experiments-parallel", 
+        action="store_true", 
+        help="Run the full training and evaluation experiments (PPO/LeakyPPO seeds) in parallel."
+    )
+
     group.add_argument(
         "--tune-ppo", 
         action="store_true", 
@@ -47,6 +54,10 @@ def main():
     if args.run_experiments:
         print(">>> Starting Full Experiments...")
         run_all_experiments()
+    
+    elif args.run_experiments_parallel:
+        print(">>> Starting Full Experiments in Parallel...")
+        run_all_experiments_parallel()
         
     elif args.tune_ppo:
         print(">>> Starting PPO Hyperparameter Tuning...")

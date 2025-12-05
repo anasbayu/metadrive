@@ -7,11 +7,11 @@ from stable_baselines3.common.buffers import ReplayBuffer
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 # ============== CONFIGURATIONS =============
-NUM_EPISODES_TO_RECORD = 1200
+NUM_EPISODES_TO_RECORD = 5000
 DATA_SAVE_PATH = "./file/expert_data/new_success_only/"
 BUFFER_SIZE = 500_000 
-EXPORT_NAME = "expert_metadrive_500k_1200eps_normalized" 
-STATS_NAME = "expert_metadrive_500k_1200eps_normalized_stats.pkl"
+EXPORT_NAME = "expert_metadrive_500k_5000eps_normalized" 
+STATS_NAME = "expert_metadrive_500k_5000eps_normalized_stats.pkl"
 TRAFFIC_DENSITY = 0.3
 
 # NOISE SETTINGS (For recovery learning)

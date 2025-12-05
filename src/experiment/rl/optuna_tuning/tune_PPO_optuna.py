@@ -21,7 +21,7 @@ torch.serialization.add_safe_globals(safe_globals)
 # ---------------------------
 
 # === CONFIG FOR TUNING ===
-N_TRIALS = 30           # Total number of trials to run
+N_TRIALS = 15           # Total number of trials to run
 N_STARTUP_TRIALS = 5     # Number of trials before pruning starts
 N_EVALUATIONS = 15       # Evaluate 15 times during training (to decide pruning)
 TIMESTEPS_PER_TRIAL = 1_500_000  # 1.5M steps per trial

@@ -31,10 +31,10 @@ def load_optuna_params(algo_name):
     # Check Leaky FIRST because "LeakyPPO" contains "PPO"
     if "LeakyPPO" in algo_name:
         base_algo = "LeakyPPO"
-        filename = "leaky_ppo_metadrive_optuna_1.5M_best_params.json"
+        filename = "leaky_ppo_optuna_1.5M_new_study_info.json"
     elif "PPO" in algo_name:
         base_algo = "PPO"
-        filename = "ppo_metadrive_optuna_1.5M_best_params.json"
+        filename = "ppo_optuna_1.5M_new_study_info.json"
     else:
         raise ValueError(f"Unknown algorithm: {algo_name}")
     
@@ -45,6 +45,13 @@ def load_optuna_params(algo_name):
     with open(filename, "r") as f:
         params = json.load(f)
     
+    # ===== DATA FILTERING =====
+    if "best_params" in params:
+        params = params["best_params"]  # Extract the nested dictionary
+    else:
+        print("Warning: 'best_params' key not found in Optuna results. Using full content.")
+    # ===== END FILTERING =====
+
     print(f"\n{'='*70}")
     print(f"  LOADED OPTUNA HYPERPARAMETERS FOR {base_algo}")
     print(f"{'='*70}")
@@ -58,8 +65,8 @@ def load_optuna_params(algo_name):
 # ============== CONFIGURATIONS =============
 NUM_ENV = 10
 TIMESTEPS = 15_000_000
-PATH_LOG_DIR = "./logs/retune2/"
-PATH_SAVED_MODEL_ROOT = "./models/retune2/"
+PATH_LOG_DIR = "./logs/retune3/"
+PATH_SAVED_MODEL_ROOT = "./models/retune3/"
 TRAFFIC_DENSITY = 0.3
 
 TRAIN_CONFIG = {
@@ -77,7 +84,7 @@ TRAIN_CONFIG = {
 }
 
 EVAL_CONFIG = {
-    "num_scenarios": 10,
+    "num_scenarios": 100,
     "start_seed": 1000,
     "use_render": False,
     "manual_control": False,

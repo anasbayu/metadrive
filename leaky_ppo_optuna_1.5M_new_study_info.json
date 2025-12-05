@@ -13,7 +13,7 @@
         "net_arch": "deep",
         "alpha": 0.092069553542002
     },
-    "n_trials": 39,
-    "n_pruned": 7,
-    "n_failed": 3
+    "n_trials": 112,
+    "n_pruned": 43,
+    "n_failed": 5
 }

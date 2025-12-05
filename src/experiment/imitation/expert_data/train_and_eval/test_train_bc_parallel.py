@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 EXPERT_DATA_PATH = "./file/expert_data/new_success_only/expert_metadrive_500k_5000eps_normalized.npz"
 STATS_PATH = "./file/expert_data/new_success_only/expert_metadrive_500k_5000eps_normalized_stats.pkl"
 
-ALGO_NAME = "LeakyPPO"  # or "LeakyPPO"
+ALGO_NAME = "PPO"  # or "LeakyPPO"
 MODEL_SAVE_PATH = f"./file/model/new_v3/bc_{ALGO_NAME.lower()}_success_only.zip"
 BEST_POLICY_PATH = f"./file/model/new_v3/bc_{ALGO_NAME.lower()}_success_only_best.zip"
 

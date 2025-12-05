@@ -10,12 +10,12 @@ BC_MODEL_PATH = None
 BC_STATS_PATH = None
 
 # === EXPERIMENTS CONFIG ===
-ALGORITHMS_TO_TEST = ["PPO"]     # ["PPO", "LeakyPPO", "PPO_Warmstart", "LeakyPPO_Warmstart"]
+ALGORITHMS_TO_TEST = ["LeakyPPO"]     # ["PPO", "LeakyPPO", "PPO_Warmstart", "LeakyPPO_Warmstart"]
 SEEDS = [5, 10, 15, 20]  # 5 seeds for statistical significance (per algorithm)
 TIMESTEPS  = 15_000_000
 EVAL_EPISODES = 100 # RLiable recommends at least 100 episodes for evaluation
 
-def run_all_experiments():
+def run_all_experiments_parallel():
     """
     Runs training and evaluation for all algorithms and seeds.
     Stores all results in a JSON file for RLiable analysis.
